@@ -15,6 +15,8 @@ import std.stdio;
 import std.string;
 static import std.ascii;
 
+extern(C) char* strsignal(int sig) nothrow @nogc; // glibc
+
 /+
 
 environment variables:
@@ -562,6 +564,22 @@ int cliMain(string[] args)
 
 		if (int rv = runCommand(environment.get("DMD", "dmd")~dmdArgs, ["CC": DefaultCompiler]))
 		{
+			// print to tty on unusual exit code
+			if (rv != 1)
+				xoutput.opentty();
+
+			xoutput.writefln("importcc: dmd exited with status %s", rv);
+
+			if (rv != 1)
+			{
+				if (rv >= -64 && rv <= -1)
+					xoutput.writefln("importcc: *** process was killed by signal %s (%s)",
+						-rv,
+						strsignal(-rv).fromStringz);
+				xoutput.writefln("importcc: the command line was: %s", escapeCommand(origArgs));
+				xoutput.writefln("importcc: working directory: %s", getcwd());
+			}
+
 			// compilation failed, check if the same command line works with gcc
 			// skip if we added __import since it won't parse
 			// @@ try using macros to remove __import?
@@ -578,8 +596,6 @@ int cliMain(string[] args)
 				if (!gccRv)
 					xoutput.writefln("importcc: *** failing command line passes with gcc: %s", escapeCommand(origArgs));
 			}
-
-			xoutput.writefln("importcc: dmd exited with status %s", rv);
 
 			// try to warn for misplaced arguments (possibly meant to fix the error)
 			if (runArgs.length)
