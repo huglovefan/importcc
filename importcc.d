@@ -284,6 +284,7 @@ do
 		xoutput.writefln("importcc: working directory: %s", getcwd());
 		xoutput.write('\a');
 
+		xoutput.flush();
 		abort();
 		return 1;
 	}
