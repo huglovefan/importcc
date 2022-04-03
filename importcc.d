@@ -1,0 +1,1249 @@
+module importcc;
+
+import core.stdc.stdlib : abort, exit;
+import core.sys.posix.stdlib : unsetenv;
+import core.sys.posix.unistd : getpid, getppid, isatty;
+import core.time;
+import std.algorithm;
+import std.array;
+import std.conv;
+import std.exception;
+import std.file;
+import std.path;
+import std.process;
+import std.stdio;
+import std.string;
+static import std.ascii;
+
+/+
+
+environment variables:
+
+IMPCC_OPTNONE=1					ignore -O flags
+IMPCC_SKIP='file1.c file2.c'	list of filenames to compile with real compiler
+IMPCC_TTYMSG=1					duplicate stderr output to /dev/tty
+V=1								print launched subcommands
+VV=1							print own command and launched subcommands
+DMD=...							override path to dmd executable
+
+IMPCC_FAILCMD=1					print command line on failure
+IMPCC_FAILSRC=1					print source code on failure
+
++/
+
+__gshared:
+
+version = useBuiltinsModule; /// auto-import "import/__importc.di" in preprocessed C sources
+
+bool V     = false;
+bool Vself = false;
+
+static immutable DefaultCompiler = "gcc";
+
+enum Mode
+{
+	compileAndLink,
+	compileOnly,
+	preprocessOnly,
+}
+enum ExeType
+{
+	normal,
+	sharedLib,
+}
+Mode compilerMode;
+ExeType exeType;
+
+string outFile;      /// output file path (set by -o)
+size_t dmdFileCount; /// number of input files in `dmdArgs`
+
+bool doOptimize; /// true if an -O flag was used
+
+bool     doRun;   /// true if -run was used
+string[] runArgs; /// arguments for -run command
+
+bool saveTemps;    /// don't delete preprocessed source files
+bool preprocessed; /// assume C sources are already preprocessed
+
+string languageOverride; /// language to treat unrecognized input files as ("c" or null)
+
+/// with -c: object files that'll be created (assuming -o wasn't used)
+string[] compiledObjects;
+
+/// source files to preprocess before compiling (source path -> temporary file path)
+string[string] cppFiles;
+
+/// object files to rename after compiling (old path -> new path)
+string[string] objectFilesToRename;
+
+/// preprocessed source files to delete after compiling
+string[] junkFiles;
+
+string[] cppArgs = [
+	//
+	// cpp
+	//
+
+	"-w", // no warnings
+
+	//
+	// builtins
+	//
+
+	// https://github.com/dlang/druntime/blob/master/src/importc.h
+	"-D__builtin_offsetof(t,i)=((unsigned long)((char *)&((t *)0)->i - (char *)0))",
+
+	"-D__alignof=_Alignof",
+	"-D__alignof__=_Alignof",
+	"-D__attribute=__attribute__",
+	"-D__extension__=",
+	"-D__inline=inline",
+	"-D__inline__=inline",
+	"-D__signed=signed",
+	"-D__signed__=signed",
+	"-D__thread=_Thread_local",
+	"-D__volatile__=volatile",
+
+	"-D__float128=__uint128_t", // hack
+	"-D__int128_t=__uint128_t", // hack
+
+	//
+	// glibc
+	//
+
+	// undefine gcc version macros
+	"-U__GNUC__",
+	"-U__GNUC_MINOR__",
+	"-U__GNUC_PATCHLEVEL__",
+
+	// fix functions using off_t
+	// with _FILE_OFFSET_BITS=64 but no __REDIRECT support, functions are
+	//  macro'd to use 64-bit versions, but those are only visible with
+	//  this macro
+	"-D_GNU_SOURCE",
+
+	// header unconditionally uses __asm__
+	// @@ implement in builtins if something needs this
+	"-D_ASM_X86_SWAB_H",
+
+	//
+	// libraries
+	//
+
+	"-DNO_DECLTYPE", // uthash
+];
+
+string[] dmdArgs = [
+	"-d",                 // no deprecations
+	"-fPIC",              // fix warnings on 32-bit (missing from digger dmd.conf)
+	"-verrors=context",   // print nice errors like gcc
+	"-Xcc=-fuse-ld=lld",  // link faster
+
+	// disable typeinfo/etc
+	// still need to manually link druntime for a few things
+	"-betterC",
+	// link in some C builtins used by C code (alloca/va_arg)
+	// this is dynamically linked because it's faster (default is static)
+	// @@ this uses the system copy with a locally compiled dmd
+	"-Xcc=-lphobos2",
+];
+
+string[] gccArgs = [
+	"-fuse-ld=lld", // link faster
+];
+
+/// sed script to apply fixes after preprocessing
+static immutable cppSedScript = [
+	// -> unbreak glob.h with _FILE_OFFSET_BITS=64
+	// it uses __REDIRECT_NTH without checking if it's supported
+	// glob uses off_t for some optional callbacks which are a gnu extension
+	// @@@ this'll break if something actually uses the extensions
+	// @@@ check by: rg -g '!*.i' 'GLOB_ALTDIRFUNC'
+	r"s/^extern void __REDIRECT_NTH (globfree, (glob_t \*__pglob), globfree64);$/extern void globfree(glob_t *__pglob);/",
+	r"s/^extern int __REDIRECT_NTH (glob, (const char \*restrict __pattern,$/extern int glob(const char *restrict __pattern,/",
+	r"s/^      glob_t \*restrict __pglob), glob64);$/      glob_t *restrict __pglob);/",
+].join('\n');
+
+struct xoutput
+{
+__gshared:
+
+	static File tty;
+
+	shared static this()
+	{
+		if ("IMPCC_TTYMSG" in environment)
+			opentty();
+
+		uncork();
+	}
+
+	static void opentty()
+	{
+		if (!tty.isOpen && !isatty(2))
+		{
+			try
+				tty = File("/dev/tty", "w");
+			catch (Exception)
+				{}
+		}
+	}
+
+	static void write(T...)(T x)
+	{
+		stderr.write(x);
+		if (tty.isOpen)
+			tty.write(x);
+	}
+	static void writeln(T...)(T x)
+	{
+		stderr.writeln(x);
+		if (tty.isOpen)
+			tty.writeln(x);
+	}
+	static void writefln(T...)(T x)
+	{
+		stderr.writefln(x);
+		if (tty.isOpen)
+			tty.writefln(x);
+	}
+
+	static void cork()
+	{
+		stderr.setvbuf(128*1024, _IOFBF);
+		if (tty.isOpen)
+			tty.setvbuf(128*1024, _IOFBF);
+	}
+	static void uncork()
+	{
+		stderr.setvbuf(512, _IOLBF);
+		if (tty.isOpen)
+			tty.setvbuf(512, _IOLBF);
+	}
+
+	static void flush()
+	{
+		stderr.flush();
+		if (tty.isOpen)
+			tty.flush();
+	}
+}
+
+int main(string[] args)
+out (rv)
+{
+	if (rv != 0 && "IMPCC_FAILCMD" in environment)
+	{
+		xoutput.writefln("importcc: the failing command line was:");
+		xoutput.writefln("  %s", args);
+	}
+	if (rv != 0 && "IMPCC_FAILSRC" in environment)
+	{
+		foreach (arg; args)
+		{
+			if (!arg.endsWith(".c"))
+				continue;
+
+			xoutput.cork();
+			xoutput.writeln(" === ", arg, " ===");
+			foreach (line; File(arg, "r").byLine)
+				xoutput.writeln(" | ", line);
+			xoutput.uncork();
+		}
+	}
+}
+do
+{
+	if ("V" in environment)
+		V = true;
+	if ("VV" in environment)
+		{ V = true; Vself = true; }
+
+	try
+	{
+		return cliMain(args);
+	}
+	catch (FriendlyException e)
+	{
+		xoutput.writeln("importcc: ", e.msg);
+		return 1;
+	}
+	catch (UseAltCompiler e)
+	{
+		if (e.cause)
+			xoutput.writefln("importcc: will use %s to compile %s", e.compiler, e.cause);
+
+		return runCommand(e.compiler~args[1..$]);
+	}
+	catch (Halt e)
+	{
+		xoutput.opentty();
+
+		xoutput.writefln("importcc: *** halt file %s reached ***", e.cause);
+		xoutput.writefln("importcc: command line: %s", escapeCommand(args));
+		xoutput.writefln("importcc: working directory: %s", getcwd());
+		xoutput.write('\a');
+
+		abort();
+		return 1;
+	}
+	catch (Error e)
+	{
+		xoutput.opentty();
+		xoutput.writeln(e);
+		xoutput.flush();
+		abort();
+		return 1;
+	}
+}
+
+auto myEnforce(T)(T expr, lazy string msg)
+{
+	enforce!FriendlyException(expr, msg);
+}
+
+class FriendlyException : Exception
+{
+	mixin basicExceptionCtors;
+}
+
+/**
+ * thrown to request that the command line be re-run with a different compiler
+ */
+class UseAltCompiler : Throwable
+{
+	string compiler = DefaultCompiler;
+	string cause;
+
+	this(string path)
+	{
+		cause = path;
+		super(null);
+	}
+}
+
+/**
+ * thrown to halt compilation for debugging
+ */
+class Halt : Throwable
+{
+	string cause;
+
+	this(string path)
+	{
+		cause = path;
+		super(null);
+	}
+}
+
+int cliMain(string[] args)
+{
+	const string[] origArgs = args;
+
+	if (Vself)
+		printCommand(args);
+
+	while (args.length > 1)
+	{
+		size_t used;
+		doCommandLineArg(args[1..$], used);
+		assert(used);
+		args = args[used..$];
+	}
+
+	//
+	// preprocess sources
+	//
+	if (cppFiles.length)
+	{
+		if (compilerMode == Mode.preprocessOnly)
+		// with -E, all output goes in a single file (stdout or set by -o)
+		{
+			File output = stdout;
+			if (outFile)
+			{
+				try
+					output = File(outFile, "w");
+				catch (ErrnoException e)
+					myEnforce(false, "failed to open output file: "~e.msg);
+			}
+
+			// start sed
+
+			if (V)
+				printCommand(["sed", cppSedScript]);
+
+			Pipe sedInput = pipe();
+			Pid sed = spawnProcess(
+				["sed", cppSedScript],
+				sedInput.readEnd,
+				output
+			);
+
+			// preprocess each file and feed the output to sed
+
+			bool error;
+
+			foreach (file, _; cppFiles)
+			{
+				if (V)
+					printCommand("cpp"~cppArgs~file);
+
+				int rv = spawnProcess(
+					"cpp"~cppArgs~file,
+					/* stdin  */ stdin,
+					/* stdout */ sedInput.writeEnd,
+					/* stderr */ stderr,
+					/* cwd    */ null,
+					/* flags  */ Config.retainStdout // closed manually
+				).wait();
+
+				if (rv)
+				{
+					error = true;
+					xoutput.writefln("importcc: cpp exited with status %s", rv);
+					break;
+				}
+			}
+
+			// close pipe and wait for sed to finish
+
+			sedInput.close();
+			if (int rv = sed.wait())
+			{
+				error = true;
+				xoutput.writefln("importcc: sed exited with status %s", rv);
+			}
+
+			if (error)
+				return 1;
+		}
+		else
+		// no -E, preprocess individual files to be used in compilation
+		{
+			foreach (file, cppOutFile; cppFiles)
+			{
+				File output;
+				try
+					output = File(cppOutFile, "w");
+				catch (ErrnoException e)
+					myEnforce(false, "failed to open output file: "~e.msg);
+
+				// start sed
+
+				Pipe sedInput = pipe();
+				Pid sed = spawnProcess(
+					["sed", cppSedScript],
+					/* stdin  */ sedInput.readEnd,
+					/* stdout */ output
+				);
+
+				// preprocess file and pass the output to sed
+
+				int rv;
+				bool error;
+
+				if (V)
+					printCommand("cpp"~cppArgs~file);
+
+				rv = spawnProcess(
+					"cpp"~cppArgs~file,
+					/* stdin  */ stdin,
+					/* stdout */ sedInput.writeEnd,
+					/* stderr */ stderr,
+					/* cwd    */ null,
+					/* flags  */ Config.retainStdout // closed manually
+				).wait();
+				if (rv)
+				{
+					error = true;
+					xoutput.writefln("importcc: cpp exited with status %s", rv);
+				}
+
+				// add junk
+
+				version(useBuiltinsModule)
+					sedInput.writeEnd.writeln("__import __importcc;");
+
+				// close the pipe and wait for sed to finish
+
+				sedInput.writeEnd.close();
+
+				rv = sed.wait();
+				if (rv)
+				{
+					error = true;
+					xoutput.writefln("importcc: sed exited with status %s", rv);
+				}
+
+				if (error)
+					return 1;
+			}
+		}
+	}
+
+	// if preprocessing only, our work is done
+	if (compilerMode == Mode.preprocessOnly)
+	{
+		myEnforce(cppFiles.length, "no input files given");
+		return 0;
+	}
+
+	myEnforce(dmdFileCount, "no input files given");
+
+	//
+	// add some flags based on variables
+	//
+
+	version(useBuiltinsModule)
+		dmdArgs ~= ["-I="~thisExePath.dirName~"/include"];
+
+	if (compilerMode == Mode.compileOnly)
+	{
+		dmdArgs ~= "-c";
+		gccArgs ~= "-c";
+	}
+
+	if (doOptimize)
+	{
+		dmdArgs ~= ["-O", "-inline"];
+		gccArgs ~= "-O2";
+	}
+
+	string defaultOutFileName()
+	{
+		if (doRun)
+			return "importcc_run_"~thisProcessID().to!string;
+		else
+			return "a.out";
+	}
+
+	//
+	// rename out file if necessary
+	// @@@ added in a rush, clean up
+	//
+	string tmpOutFile;
+	string desiredOutFile;
+	if (compilerMode == Mode.compileAndLink)
+	{
+		if (!outFile)
+			outFile = defaultOutFileName();
+
+		tmpOutFile = outFile.stripExtension~"_tmp"~.outFile.extension;
+		desiredOutFile = outFile;
+
+		outFile = tmpOutFile;
+	}
+
+	if (outFile)
+	{
+		myEnforce(compilerMode != Mode.compileOnly || dmdFileCount == 1,
+			"can't use -o when compiling more than one object file");
+
+		dmdArgs ~= "-of="~outFile;
+		gccArgs ~= ["-o", outFile];
+	}
+	else if (compilerMode == Mode.compileAndLink)
+	{
+		outFile = defaultOutFileName();
+
+		dmdArgs ~= "-of="~outFile;
+		gccArgs ~= ["-o", outFile];
+	}
+
+	//
+	// compile!
+	//
+	{
+		MonoTime start = MonoTime.currTime;
+
+		// set CC= for linking
+
+		if (int rv = runCommand(environment.get("DMD", "dmd")~dmdArgs, ["CC": DefaultCompiler]))
+		{
+			// compilation failed, check if the same command line works with gcc
+			// skip if we added __import since it won't parse
+			// @@ try using macros to remove __import?
+			version(useBuiltinsModule) {}
+			else
+			{
+				File nul = File("/dev/null", "rw");
+				int gccRv = spawnProcess(
+					DefaultCompiler~gccArgs,
+					nul,
+					nul,
+					nul
+				).wait();
+				if (!gccRv)
+					xoutput.writefln("importcc: *** failing command line passes with gcc: %s", escapeCommand(origArgs));
+			}
+
+			xoutput.writefln("importcc: dmd exited with status %s", rv);
+
+			// try to warn for misplaced arguments (possibly meant to fix the error)
+			if (runArgs.length)
+				xoutput.writefln("importcc: note: command line to -run contains %s argument(s)", runArgs.length);
+
+			return rv;
+		}
+
+		Duration elapsed = MonoTime.currTime - start;
+
+		if (elapsed >= 2.seconds)
+		{
+			// limit to millisecond precision
+			elapsed = msecs(elapsed.total!"msecs");
+
+			if (outFile)
+				xoutput.writefln("importcc: warning: compiling %s took %s", outFile.baseName, elapsed);
+			else
+				xoutput.writefln("importcc: warning: compilation took %s", elapsed);
+		}
+	}
+
+	if (desiredOutFile)
+	{
+		tmpOutFile.rename(desiredOutFile);
+		outFile = desiredOutFile;
+	}
+
+	// delete preprocessed source files
+	if (!saveTemps)
+	{
+		foreach (path; junkFiles)
+			std.file.remove(path);
+	}
+
+	switch (compilerMode)
+	{
+		case Mode.compileAndLink:
+			// delete dmd's generated object file for the executable
+			// (gcc doesn't leave one so neither should importcc)
+			// TODO: do this in more cases without deleting the wrong object file
+			// dmd works like this:
+			// if any source files are given on the command line, dmd compiles
+			//  them to an object file named after the executable
+			// if an object file with the same name already exists (or was
+			//  created by compiling one of the sources), it'll be overwritten
+			// -- may have to temporarily rename the -of= to avoid colliding
+			//     with other objects
+			// -------- added the renaming thing, TODO: delete the _tmp object now
+			if (doRun)
+			{
+				string exeObjectFile = outFile.setExtension(".o");
+				// ignore ENOENT: the file won't be created if only object files
+				//  are given on the command line
+				try
+					std.file.remove(exeObjectFile);
+				catch (FileException e)
+				{
+					import core.stdc.errno : ENOENT;
+					if (e.errno != ENOENT)
+						throw e;
+				}
+			}
+
+			checkUnsupportedFunction([outFile]);
+
+			// run the executable
+			if (doRun)
+			{
+				string arg0 = outFile;
+				if (!arg0.canFind('/'))
+					arg0 = "./"~arg0;
+				int rv = runCommand(arg0~runArgs);
+				if (rv)
+					xoutput.writefln("importcc: command exited with status %s", rv);
+				try
+					std.file.remove(outFile);
+				catch (FileException e)
+					xoutput.writeln(e.msg);
+				exit(rv);
+			}
+			break;
+
+		case Mode.compileOnly:
+			checkUnsupportedFunction((outFile) ? [outFile] : compiledObjects);
+
+			// if we compiled some automatically-named objects, rename any whose
+			//  name had to be changed
+			if (!outFile)
+			{
+				foreach (oldPath, newPath; objectFilesToRename)
+					oldPath.rename(newPath);
+			}
+			break;
+
+		default:
+			assert(0);
+	}
+
+	return 0;
+}
+
+void doCommandLineArg(string[] args, out size_t used)
+{
+	string getOption()
+	{
+		if (used < 1) used = 1;
+		return args[0];
+	}
+	string getValue()
+	{
+		if (used < 2) used = 2;
+		myEnforce(args.length >= 2, "missing value for option "~args[0]);
+		return args[1];
+	}
+	string[2] getOptionAndValue()
+	{
+		if (used < 2) used = 2;
+		myEnforce(args.length >= 2, "missing value for option "~args[0]);
+		return args[0..2];
+	}
+
+	switch (getOption())
+	{
+		//
+		// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/c99.html
+		//
+
+		case "-c":
+			myEnforce(exeType == ExeType.normal, "can't use -c with -shared");
+			myEnforce(compilerMode == Mode.compileAndLink, "more than one of -E or -c given");
+			compilerMode = Mode.compileOnly;
+			return;
+		case "-D":
+			cppArgs ~= getOptionAndValue();
+			return;
+		case "-E":
+			myEnforce(exeType == ExeType.normal, "can't use -E with -shared");
+			myEnforce(compilerMode == Mode.compileAndLink, "more than one of -E or -c given");
+			compilerMode = Mode.preprocessOnly;
+			return;
+		case "-g":
+			dmdArgs ~= getOption();
+			gccArgs ~= getOption();
+			return;
+		case "-I":
+			cppArgs ~= getOptionAndValue();
+			return;
+		case "-L":
+			dmdArgs ~= "-L-L"~getValue();
+			gccArgs ~= "-L"~getValue();
+			return;
+		case "-O0":
+			doOptimize = false;
+			return;
+		case "-O":
+		case "-O1":
+		case "-O2":
+		case "-O3":
+		case "-Ofast":
+			if ("IMPCC_OPTNONE" !in environment)
+				doOptimize = true;
+			return;
+		case "-o":
+			myEnforce(!outFile, "more than one output file given");
+			outFile = getValue();
+			return;
+		case "-U":
+			cppArgs ~= getOptionAndValue();
+			return;
+
+		//
+		// common gcc flags
+		//
+
+		case "-dumpmachine":
+			// @@@ do this properly
+			// run gcc with this and other flags (mainly -m)
+			writeln("x86_64-linux-gnu");
+			exit(0);
+			return;
+		case "-fPIC":
+			return; // already set
+		case "-fPIE":
+			dmdArgs ~= getOption();
+			gccArgs ~= getOption();
+			return;
+		case "-fpreprocessed":
+			preprocessed = true;
+			return;
+		case "-m32":
+		case "-m64":
+			cppArgs ~= getOption();
+			dmdArgs ~= getOption();
+			gccArgs ~= getOption();
+			return;
+		case "-march=native":
+			dmdArgs ~= "-mcpu=native";
+			gccArgs ~= getOption();
+			return;
+		case "-pthread":
+			cppArgs ~= getOption();
+			dmdArgs ~= "-L-lpthread";
+			gccArgs ~= getOption();
+			return;
+		case "-save-temps":
+			saveTemps = true;
+			return;
+		case "-shared":
+			myEnforce(compilerMode == Mode.compileAndLink, "can't use -shared with -E or -c");
+			dmdArgs ~= getOption();
+			gccArgs ~= getOption();
+			exeType = ExeType.sharedLib;
+			return;
+		case "-std=c89":
+		case "-std=c99":
+		case "-std=c11":
+		case "-std=gnu89":
+		case "-std=gnu99":
+		case "-std=gnu11":
+			cppArgs ~= getOption();
+			return;
+		case "-W":
+		case "-Wall":
+		case "-Wextra":
+		case "-Wpedantic":
+			dmdArgs.filterAll("-d");
+			dmdArgs.filterAll("-w");
+			dmdArgs.appendUnique("-wi");
+			cppArgs.filterAll("-w"); // -W doesn't override this
+			return;
+		case "-Werror":
+			dmdArgs.filterAll("-d");
+			dmdArgs.filterAll("-wi");
+			dmdArgs.appendUnique("-w");
+			cppArgs.filterAll("-w"); // -W doesn't override this
+			return;
+		case "-w":
+			dmdArgs.appendUnique("-d");
+			dmdArgs.filterAll("-wi");
+			cppArgs.appendUnique("-w");
+			return;
+		case "-x":
+			languageOverride = getValue();
+			myEnforce(languageOverride == "c", "-x: unknown language "~languageOverride);
+			return;
+
+		//
+		// cpp flags also accepted by gcc
+		//
+
+		case "-A":
+			cppArgs ~= getOptionAndValue();
+			return;
+		case "-P":
+			cppArgs ~= getOption();
+			return;
+		case "-include":
+			cppArgs ~= getOptionAndValue();
+			return;
+
+		//
+		// linker flags
+		//
+
+		case "--default-symver":
+			dmdArgs ~= "-Xcc=-Wl,"~getOption();
+			gccArgs ~= "-Wl,"~getOption();
+			return;
+		case "-rpath":
+		case "-soname":
+		case "-version-script":
+			dmdArgs ~= "-Xcc=-Wl,"~getOption()~','~getValue();
+			gccArgs ~= "-Wl,"~getOption()~','~getValue();
+			return;
+
+		//
+		// dmd
+		//
+
+		case "-run":
+			myEnforce(compilerMode == Mode.compileAndLink, "can't use -run with -E or -c");
+			myEnforce(exeType == ExeType.normal, "can't use -run with -shared");
+			addInputFileArg(getValue());
+			doRun = true;
+			runArgs = args[2..$];
+			used = args.length;
+			return;
+
+		default:
+			goto next;
+	}
+	assert(0); // cases must use return, not break
+next:
+
+	//
+	// posix
+	//
+
+	if (getOption().startsWith("-D")) // define macro
+	{
+		cppArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-I")) // header include path
+	{
+		cppArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-L")) // library search path
+	{
+		dmdArgs ~= "-L"~getOption();
+		gccArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-l")) // link library
+	{
+		dmdArgs ~= "-L"~getOption();
+		gccArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-U")) // undefine macro
+	{
+		cppArgs ~= getOption();
+		return;
+	}
+
+	//
+	// gcc
+	//
+
+	if (getOption().startsWith("-A")) // preprocessor assertion
+	{
+		// https://gcc.gnu.org/onlinedocs/cpp/Obsolete-Features.html#Assertions
+		cppArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-fuse-ld=")) // specify linker to use
+	{
+		dmdArgs ~= "-Xcc="~getOption();
+		gccArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-Wl,")) // pass flags to linker
+	{
+		// individual -L= args might get reordered, pass using -Xcc=
+		//foreach (part; getOption()["-Wl,".length..$].replace(",", " ").splitter)
+		//	dmdArgs ~= "-L"~part;
+		dmdArgs ~= "-Xcc="~getOption();
+		gccArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-Wno-")) // silence specific warning
+	{
+		return; // ignore
+	}
+
+	//
+	// importcc
+	//
+
+	if (getOption().startsWith("-Xdmd="))
+	{
+		dmdArgs ~= getOption()["-Xdmd=".length..$];
+		return;
+	}
+
+	// unsupported option
+	if (getOption().startsWith('-'))
+	{
+		myEnforce(false, "unknown option "~getOption());
+	}
+
+	// input file
+	string path = getOption();
+	checkHaltFile(path);
+	checkSkipFile(path);
+	addInputFileArg(path);
+}
+
+/// append if the array doesn't already have it
+void appendUnique(ref string[] arr, string it)
+{
+	if (!arr.canFind(it))
+		arr ~= it;
+}
+
+/// remove all instances of item from array
+void filterAll(ref string[] arr, string it)
+{
+	arr = arr.filter!(x => x != it).array;
+}
+
+void addInputFileArg(string path)
+{
+	switch (path.extension.toLower)
+	{
+		// C
+		case ".c":
+		case ".h":
+			if (preprocessed)
+				goto case ".i";
+
+			// object files go in the current directory (dmd and gcc agree)
+			string preprocessedName = path.baseName.suitableInputFile;
+			string outputObjectName = preprocessedName.setExtension(".o");
+			string wantedObjectName = path.baseName.setExtension(".o");
+			// (with the -c option)
+			// if two sources have the same name but a different path, dmd gives
+			//  an error (duplicate module name) but gcc seems to prefer the
+			//  last one given on the command line
+
+			cppFiles[path]  = preprocessedName;
+			dmdArgs        ~= preprocessedName;
+			gccArgs        ~= preprocessedName;
+			junkFiles      ~= preprocessedName;
+			if (outputObjectName != wantedObjectName)
+				objectFilesToRename[outputObjectName] = wantedObjectName;
+
+			compiledObjects ~= outputObjectName;
+
+			dmdFileCount++;
+			break;
+
+		// other sources that don't need preprocessing
+		case ".d":
+		case ".i":
+			dmdArgs ~= path;
+			gccArgs ~= path;
+			dmdFileCount++;
+			break;
+
+		// compiled code
+		case ".a":
+		case ".o":
+		case ".so":
+			dmdArgs ~= path;
+			gccArgs ~= path;
+			dmdFileCount++;
+			break;
+
+		default:
+			// .so with version number
+			// pass this using -L= because dmd can't detect it by the extension
+			if (path.baseName.canFind(".so."))
+			{
+				dmdArgs ~= "-L="~path;
+				gccArgs ~= path;
+				dmdFileCount++;
+				break;
+			}
+
+			if (languageOverride == "c")
+				goto case ".c";
+
+			myEnforce(false, "unrecognized input file "~path);
+			break;
+	}
+}
+
+/**
+ * convert the path of a C source file to a similar (but different) one that dmd
+ *  would accept as an input file
+ * 
+ * 1. the name part is mangled to be a valid identifier (used as the module name)
+ * 2. the extension is replaced with .i
+ */
+string suitableInputFile(string path)
+{
+	string dir = path.dirName;
+	string base = path.baseName.stripExtension;
+
+	// name only contains extension (.extension returns empty in that case)
+	if (!path.extension.length)
+		base = "";
+
+	// cast: work with gdc 10
+	base = base.map!(c => std.ascii.isAlphaNum(c) ? c : cast(dchar)'_').to!string;
+
+	if (!base.length || std.ascii.isDigit(base[0]) ||
+		base == "object")
+	{
+		base = '_'~base;
+	}
+
+	path = dir~'/'~base~".i";
+
+	return path;
+}
+
+unittest
+{
+	assert(suitableInputFile("./test.c") == "./test.i");
+	assert(suitableInputFile("./aåb.c") == "./a_b.i");
+	assert(suitableInputFile("./123.c") == "./_123.i");
+	assert(suitableInputFile("./object.c") == "./_object.i");
+	assert(suitableInputFile("./.c") == "./_.i");
+}
+
+/**
+ * look for and warn about unsupported functions used by an object file or
+ * executable
+ * 
+ * currently this only looks for setjmp()
+ */
+void checkUnsupportedFunction(string[] objs)
+{
+	// nothing to do?
+	// setjmp() is only a problem if optimizations are enabled
+	if (!doOptimize)
+		return;
+
+	allNamesLoop:
+	foreach (line; pipeProcess("nm"~objs).stdout.byLine)
+	{
+		int i;
+		thisLineLoop:
+		foreach (part; line.splitter)
+		{
+			// the setjmp line looks like this:
+			// "                 U _setjmp"
+
+			if (i == 0)
+			{
+				if (part != "U")
+					continue allNamesLoop;
+
+				i++;
+				continue thisLineLoop;
+			}
+
+			// nm -D /lib/x86_64-linux-gnu/libc.so.6 | awk '$3~/jmp/&&$3!~/PRIVATE/{print$3}' | grep -o '^[^@]*'
+			switch (part)
+			{
+				case "_longjmp":
+				case "longjmp":
+				case "__longjmp_chk":
+				case "_setjmp":
+				case "setjmp":
+				case "siglongjmp":
+				case "__sigsetjmp":
+					xoutput.writefln("*** importcc warning: %s() may not work correctly with optimization enabled (used by: %s)",
+						part,
+						(objs.length == 1) ? objs[0].baseName : "unknown");
+					break;
+				default:
+					break;
+			}
+
+			continue allNamesLoop;
+		}
+	}
+}
+
+int runCommand(string[] args, string[string] env = null)
+{
+	if (V)
+		printCommand(args);
+
+	return spawnProcess(args, env).wait();
+}
+
+void printCommand(const string[] args)
+{
+	xoutput.write("+ ", escapeCommand(args), '\n');
+}
+
+/// clone of std.process.escapeShellCommand() with nicer output (no unnecessary quoting)
+string escapeCommand(const string[] cmd)
+{
+	static bool shouldEscape(string s)
+	{
+		if (!s.length)
+			return true;
+		foreach (c; s)
+			switch (c)
+			{
+				case '0': .. case '9':
+				case 'A': .. case 'Z':
+				case 'a': .. case 'z':
+				case '-':
+				case '=':
+				case '/':
+				case '.':
+				case ',':
+				case ':':
+				case '_':
+					continue;
+				default:
+					return true;
+			}
+		return false;
+	}
+	static string escapeArgument(string s)
+	{
+		return shouldEscape(s) ? s.escapeShellFileName : s;
+	}
+	return cmd.map!escapeArgument.join(' ');
+}
+
+/**
+ * check if an input file should be skipped according to IMPCC_SKIP
+ */
+void checkSkipFile(string inputFile)
+{
+	foreach (pattern; environment.get("IMPCC_SKIP", "").splitter)
+	{
+		if (testPath(inputFile, pattern))
+			throw new UseAltCompiler(inputFile);
+	}
+}
+
+/**
+ * check if compilation should be halted according to IMPCC_HALT
+ */
+void checkHaltFile(string inputFile)
+{
+	foreach (pattern; environment.get("IMPCC_HALT", "").splitter)
+	{
+		if (testPath(inputFile, pattern))
+			throw new Halt(inputFile);
+	}
+}
+
+bool testPath(string path, string pattern)
+{
+	// if the pattern contains directories, match them at the end of the path
+	// otherwise, just test the filename
+
+	if (pattern.canFind('/'))
+	{
+		path    = path.asAbsolutePath.asNormalizedPath.array;
+		pattern = pattern.asNormalizedPath.array;
+
+		if (path.length < pattern.length)
+			return false;
+		else if (path.length == pattern.length)
+			return path == pattern;
+		else
+			return path.endsWith(chainPath("/", pattern)); // prepend slash
+	}
+	else
+	{
+		return path.baseName == pattern;
+	}
+}
+
+unittest
+{
+	string curdir = getcwd().baseName;
+
+	assert(testPath("src/file.c", "file.c"));
+	assert(!testPath("src/file.c", "xfile.c"));
+	assert(!testPath("src/xfile.c", "file.c"));
+
+	assert(testPath("src/file.c", "src/file.c"));
+	assert(!testPath("src/file.c", "xsrc/file.c"));
+	assert(!testPath("xsrc/file.c", "src/file.c"));
+
+	assert(testPath("src/file.c", "src/file.c"));
+	assert(!testPath("src/file.c", "src/xfile.c"));
+	assert(!testPath("src/xfile.c", "src/file.c"));
+
+	assert(!testPath("src/file.c", "other/file.c"));
+
+	assert(testPath("file.c", curdir~"/file.c"));
+	assert(!testPath("file.c", "not_"~curdir~"/file.c"));
+}
