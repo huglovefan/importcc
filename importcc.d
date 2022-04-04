@@ -522,18 +522,20 @@ int cliMain(string[] args)
 	}
 
 	//
-	// rename out file if necessary
-	// @@@ added in a rush, clean up
+	// if compiling an executable, temporarily rename it to avoid accidentally
+	//  overwriting something with the object file dmd generates for it
 	//
 	string tmpOutFile;
 	string desiredOutFile;
+	string exeObjectFile;
 	if (compilerMode == Mode.compileAndLink)
 	{
 		if (!outFile)
 			outFile = defaultOutFileName();
 
-		tmpOutFile = outFile.stripExtension~"_tmp"~.outFile.extension;
+		tmpOutFile     = outFile.stripExtension~"_tmp"~.outFile.extension;
 		desiredOutFile = outFile;
+		exeObjectFile  = tmpOutFile.setExtension(".o");
 
 		outFile = tmpOutFile;
 	}
@@ -635,19 +637,8 @@ int cliMain(string[] args)
 	{
 		case Mode.compileAndLink:
 			// delete dmd's generated object file for the executable
-			// (gcc doesn't leave one so neither should importcc)
-			// TODO: do this in more cases without deleting the wrong object file
-			// dmd works like this:
-			// if any source files are given on the command line, dmd compiles
-			//  them to an object file named after the executable
-			// if an object file with the same name already exists (or was
-			//  created by compiling one of the sources), it'll be overwritten
-			// -- may have to temporarily rename the -of= to avoid colliding
-			//     with other objects
-			// -------- added the renaming thing, TODO: delete the _tmp object now
-			if (doRun)
+			if (exeObjectFile)
 			{
-				string exeObjectFile = outFile.setExtension(".o");
 				// ignore ENOENT: the file won't be created if only object files
 				//  are given on the command line
 				try

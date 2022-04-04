@@ -172,6 +172,26 @@ mustcompile /usr/include/stdlib.h
 	importcc -run ../tests/true.c
 ) || { g_rv=1; echo error; }
 
+## test that compiling an executable doesn't leave an object file behind
+( set -e
+	rm -rf xtmp
+	mkdir -p xtmp
+	cd xtmp
+
+	mkdir src
+	cp ../../tests/true.c src/
+
+	importcc                src/true.c && [ -z "$(find -name '*.o')" ]
+	importcc           -run src/true.c && [ -z "$(find -name '*.o')" ]
+	importcc -o hi          src/true.c && [ -z "$(find -name '*.o')" ]
+	importcc -o hi     -run src/true.c && [ -z "$(find -name '*.o')" ]
+	importcc -o src/hi      src/true.c && [ -z "$(find -name '*.o')" ]
+	importcc -o src/hi -run src/true.c && [ -z "$(find -name '*.o')" ]
+
+	cd ..
+	rm -rf xtmp
+) || { g_rv=1; echo error; }
+
 if [ $g_rv -eq 0 ]
 then
 	echo ok
