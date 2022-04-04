@@ -1133,8 +1133,13 @@ void checkUnsupportedFunction(string[] objs)
 	if (!doOptimize)
 		return;
 
+	ProcessPipes proc = pipeProcess(
+		"nm"~objs,
+		Redirect.stdout
+	);
+
 	allNamesLoop:
-	foreach (line; pipeProcess("nm"~objs).stdout.byLine)
+	foreach (line; proc.stdout.byLine)
 	{
 		int i;
 		thisLineLoop:
@@ -1173,6 +1178,8 @@ void checkUnsupportedFunction(string[] objs)
 			continue allNamesLoop;
 		}
 	}
+
+	proc.pid.wait();
 }
 
 int runCommand(string[] args, string[string] env = null)
