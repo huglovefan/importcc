@@ -250,9 +250,10 @@ out (rv)
 				continue;
 
 			xoutput.cork();
-			xoutput.writeln(" === ", arg, " ===");
+			xoutput.writeln("=== ", arg, " ===");
+			size_t no;
 			foreach (line; File(arg, "r").byLine)
-				xoutput.writeln(" | ", line);
+				xoutput.writefln("%5d | %s", ++no, line);
 			xoutput.uncork();
 		}
 	}
