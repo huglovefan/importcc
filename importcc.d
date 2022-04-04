@@ -1016,7 +1016,7 @@ void filterAll(ref string[] arr, string it)
 
 void addInputFileArg(string path)
 {
-	switch (path.extension.toLower)
+	switch (path.extension)
 	{
 		// C
 		case ".c":
