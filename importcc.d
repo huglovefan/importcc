@@ -23,7 +23,8 @@ environment variables:
 
 IMPCC_OPTNONE=1					ignore -O flags
 IMPCC_SKIP='file1.c file2.c'	list of filenames to compile with real compiler
-IMPCC_TTYMSG=1					duplicate stderr output to /dev/tty
+IMPCC_STDERR=$PWD/stderr.log	duplicate all stderr output to file (absolute path)
+IMPCC_TTYMSG=1					duplicate error messages to /dev/tty
 V=1								print launched subcommands
 VV=1							print own command and launched subcommands
 DMD=...							override path to dmd executable
@@ -182,7 +183,9 @@ __gshared:
 
 	static void opentty()
 	{
-		if (!tty.isOpen && !isatty(2))
+		if (!tty.isOpen &&
+			"_IMPCC_XOUTPUT_SKIP_TTY" !in environment &&
+			!isatty(2))
 		{
 			try
 				tty = File("/dev/tty", "w");
@@ -263,6 +266,36 @@ do
 
 	try
 	{
+		// with IMPCC_STDERR: re-run the command line in a child process and
+		//  duplicate its stderr to the file
+		if (auto stderrPath = environment.get("IMPCC_STDERR"))
+		{
+			environment.remove("IMPCC_STDERR");
+			// xoutput won't detect the pipe as a terminal, handle that here
+			if (isatty(2))
+				environment["_IMPCC_XOUTPUT_SKIP_TTY"] = "1";
+			File logFile = File(stderrPath, "a");
+			Pipe output = pipe();
+			Pid p = spawnProcess(
+				args,
+				/* stdin  */ stdin,
+				/* stdout */ stdout,
+				/* stderr */ output.writeEnd
+			);
+			bool nonempty;
+			foreach (line; output.readEnd.byLine)
+			{
+				stderr.writeln(line);
+				logFile.writeln(line);
+				nonempty = true;
+			}
+			// empty line between outputs
+			if (nonempty)
+				logFile.write('\n');
+			output.readEnd.close();
+			return p.wait();
+		}
+
 		return cliMain(args);
 	}
 	catch (FriendlyException e)
