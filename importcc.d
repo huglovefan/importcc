@@ -560,18 +560,13 @@ int cliMain(string[] args)
 	//  overwriting something with the object file dmd generates for it
 	//
 	string tmpOutFile;
-	string desiredOutFile;
-	string exeObjectFile;
 	if (compilerMode == Mode.compileAndLink)
 	{
 		if (!outFile)
 			outFile = defaultOutFileName();
 
-		tmpOutFile     = outFile.stripExtension~"_tmp"~.outFile.extension;
-		desiredOutFile = outFile;
-		exeObjectFile  = tmpOutFile.setExtension(".o");
-
-		outFile = tmpOutFile;
+		tmpOutFile = outFile;
+		outFile    = outFile.stripExtension~"_tmp"~.outFile.extension;
 	}
 
 	if (outFile)
@@ -654,10 +649,11 @@ int cliMain(string[] args)
 		}
 	}
 
-	if (desiredOutFile)
+	// rename back from temporary name
+	if (tmpOutFile)
 	{
-		tmpOutFile.rename(desiredOutFile);
-		outFile = desiredOutFile;
+		outFile.rename(tmpOutFile);
+		swap(outFile, tmpOutFile);
 	}
 
 	// delete preprocessed source files
@@ -671,18 +667,18 @@ int cliMain(string[] args)
 	{
 		case Mode.compileAndLink:
 			// delete dmd's generated object file for the executable
-			if (exeObjectFile)
+			try
+			{
+				string exeObjectFile = tmpOutFile.setExtension(".o");
+				std.file.remove(exeObjectFile);
+			}
+			catch (FileException e)
 			{
 				// ignore ENOENT: the file won't be created if only object files
 				//  are given on the command line
-				try
-					std.file.remove(exeObjectFile);
-				catch (FileException e)
-				{
-					import core.stdc.errno : ENOENT;
-					if (e.errno != ENOENT)
-						throw e;
-				}
+				import core.stdc.errno : ENOENT;
+				if (e.errno != ENOENT)
+					throw e;
 			}
 
 			checkUnsupportedFunction([outFile]);
