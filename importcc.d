@@ -58,7 +58,10 @@ Mode compilerMode;
 ExeType exeType;
 
 string outFile;      /// output file path (set by -o)
+
 size_t dmdFileCount; /// number of input files in `dmdArgs`
+size_t dmdSourceFileCount; /// ... ones that'll be compiled
+size_t dmdLinkerFileCount; /// ... ones that'll be passed to linker
 
 bool doOptimize; /// true if an -O flag was used
 
@@ -556,11 +559,11 @@ int cliMain(string[] args)
 	}
 
 	//
-	// if compiling an executable, temporarily rename it to avoid accidentally
-	//  overwriting something with the object file dmd generates for it
+	// if compiling sources to an executable, temporarily rename the output file
+	//  to avoid overwriting something with the object file dmd generates for it
 	//
 	string tmpOutFile;
-	if (compilerMode == Mode.compileAndLink)
+	if (compilerMode == Mode.compileAndLink && dmdSourceFileCount)
 	{
 		if (!outFile)
 			outFile = defaultOutFileName();
@@ -667,18 +670,11 @@ int cliMain(string[] args)
 	{
 		case Mode.compileAndLink:
 			// delete dmd's generated object file for the executable
-			try
+			// the temporary name is used when we know one will be created
+			if (tmpOutFile)
 			{
 				string exeObjectFile = tmpOutFile.setExtension(".o");
 				std.file.remove(exeObjectFile);
-			}
-			catch (FileException e)
-			{
-				// ignore ENOENT: the file won't be created if only object files
-				//  are given on the command line
-				import core.stdc.errno : ENOENT;
-				if (e.errno != ENOENT)
-					throw e;
 			}
 
 			checkUnsupportedFunction([outFile]);
@@ -1039,6 +1035,7 @@ void addInputFileArg(string path)
 			compiledObjects ~= outputObjectName;
 
 			dmdFileCount++;
+			dmdSourceFileCount++;
 			break;
 
 		// other sources that don't need preprocessing
@@ -1047,6 +1044,7 @@ void addInputFileArg(string path)
 			dmdArgs ~= path;
 			gccArgs ~= path;
 			dmdFileCount++;
+			dmdSourceFileCount++;
 			break;
 
 		// compiled code
@@ -1056,6 +1054,7 @@ void addInputFileArg(string path)
 			dmdArgs ~= path;
 			gccArgs ~= path;
 			dmdFileCount++;
+			dmdLinkerFileCount++;
 			break;
 
 		default:
@@ -1066,6 +1065,7 @@ void addInputFileArg(string path)
 				dmdArgs ~= "-L="~path;
 				gccArgs ~= path;
 				dmdFileCount++;
+				dmdLinkerFileCount++;
 				break;
 			}
 
