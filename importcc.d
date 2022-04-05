@@ -143,7 +143,6 @@ string[] dmdArgs = [
 	"-d",                 // no deprecations
 	"-fPIC",              // fix warnings on 32-bit (missing from digger dmd.conf)
 	"-verrors=context",   // print nice errors like gcc
-	"-Xcc=-fuse-ld=lld",  // link faster
 
 	// disable typeinfo/etc
 	// still need to manually link druntime for a few things
@@ -154,9 +153,7 @@ string[] dmdArgs = [
 	"-Xcc=-lphobos2",
 ];
 
-string[] gccArgs = [
-	"-fuse-ld=lld", // link faster
-];
+string[] gccArgs;
 
 /// sed script to apply fixes after preprocessing
 static immutable cppSedScript = [
