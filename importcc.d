@@ -132,6 +132,11 @@ string[] cppArgs = [
 	// @@ implement in builtins if something needs this
 	"-D_ASM_X86_SWAB_H",
 
+	// uses inline functions which pollute object files, implemented using
+	//  templates in __importcc.di
+	"-D_BITS_BYTESWAP_H",
+	"-D_BITS_UINTN_IDENTITY_H",
+
 	//
 	// libraries
 	//
