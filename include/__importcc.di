@@ -56,6 +56,13 @@ bool __builtin_isunordered(T)(T x, T y)
 
 // -----------------------------------------------------------------------------
 
+const(char)* __builtin_FUNCTION(string func = __FUNCTION__)()
+{
+	return func.ptr;
+}
+
+// -----------------------------------------------------------------------------
+
 // reimplement some inline functions here to prevent them from polluting object files
 // the #include guards for these files have been defined in importcc.d
 

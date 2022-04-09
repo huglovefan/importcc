@@ -114,6 +114,8 @@ string[] cppArgs = [
 	"-D__float128=__uint128_t", // hack
 	"-D__int128_t=__uint128_t", // hack
 
+	"-D__FUNCTION__=__builtin_FUNCTION",
+
 	//
 	// glibc
 	//
