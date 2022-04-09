@@ -21,8 +21,9 @@ extern(C) char* strsignal(int sig) nothrow @nogc; // glibc
 
 environment variables:
 
+IMPCC_MAYSKIP='file1.c file2.c'	compile with gcc if dmd fails
 IMPCC_OPTNONE=1					ignore -O flags
-IMPCC_SKIP='file1.c file2.c'	list of filenames to compile with real compiler
+IMPCC_SKIP='file1.c file2.c'	compile with gcc always
 IMPCC_STDERR=$PWD/stderr.log	duplicate all stderr output to file (absolute path)
 IMPCC_TTYMSG=1					duplicate error messages to /dev/tty
 V=1								print launched subcommands
@@ -610,6 +611,43 @@ int cliMain(string[] args)
 				xoutput.writefln("importcc: working directory: %s", getcwd());
 			}
 
+			// if one of the input files is in IMPCC_MAYSKIP, re-run the
+			//  command line with gcc
+			string tryGcc;
+			loop: foreach (arg; origArgs)
+			{
+				switch (arg.extension)
+				{
+					case ".c":
+					case ".h":
+						if (arg.exists && checkMaySkipFile(arg))
+						{
+							tryGcc = arg;
+							break loop;
+						}
+						break;
+					default:
+						break;
+				}
+			}
+			if (tryGcc)
+			{
+				xoutput.writefln("importcc: will use %s to compile %s", DefaultCompiler, tryGcc);
+				int gccRv = runCommand(DefaultCompiler~origArgs[1..$]);
+				if (gccRv == 0)
+				{
+					// clean up temporary files on success
+					foreach (path; junkFiles)
+						std.file.remove(path);
+
+					return gccRv;
+				}
+				else
+				{
+					xoutput.writefln("importcc: %s exited with status %s", DefaultCompiler, gccRv);
+				}
+			}
+
 			// try to warn for misplaced arguments (possibly meant to fix the error)
 			if (runArgs.length)
 				xoutput.writefln("importcc: note: command line to -run contains %s argument(s)", runArgs.length);
@@ -1162,7 +1200,7 @@ void checkUnsupportedFunction(string[] objs)
 	proc.pid.wait();
 }
 
-int runCommand(string[] args, string[string] env = null)
+int runCommand(const string[] args, string[string] env = null)
 {
 	if (V)
 		printCommand(args);
@@ -1218,6 +1256,19 @@ void checkSkipFile(string inputFile)
 		if (testPath(inputFile, pattern))
 			throw new UseAltCompiler(inputFile);
 	}
+}
+
+/**
+ * check if an input file should be compiled with gcc according to IMPCC_MAYSKIP
+ */
+bool checkMaySkipFile(string inputFile)
+{
+	foreach (pattern; environment.get("IMPCC_MAYSKIP", "").splitter)
+	{
+		if (testPath(inputFile, pattern))
+			return true;
+	}
+	return false;
 }
 
 /**
