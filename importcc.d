@@ -976,6 +976,11 @@ next:
 	// importcc
 	//
 
+	if (getOption().startsWith("-Xcpp="))
+	{
+		cppArgs ~= getOption()["-Xcpp=".length..$];
+		return;
+	}
 	if (getOption().startsWith("-Xdmd="))
 	{
 		dmdArgs ~= getOption()["-Xdmd=".length..$];
