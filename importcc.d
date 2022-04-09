@@ -1247,10 +1247,18 @@ void checkHaltFile(string inputFile)
 
 bool testPath(string path, string pattern)
 {
-	// if the pattern contains directories, match them at the end of the path
-	// otherwise, just test the filename
+	if (pattern.endsWith('/'))
+	{
+		pattern = pattern.asNormalizedPath.array;
 
-	if (pattern.canFind('/'))
+		if (pattern == "/")
+			return true;
+
+		path = path.asAbsolutePath.asNormalizedPath.array;
+
+		return path.canFind(chainPath("/", pattern~'/')); // prepend + append slash
+	}
+	else if (pattern.canFind('/'))
 	{
 		path    = path.asAbsolutePath.asNormalizedPath.array;
 		pattern = pattern.asNormalizedPath.array;
@@ -1288,4 +1296,13 @@ unittest
 
 	assert(testPath("file.c", curdir~"/file.c"));
 	assert(!testPath("file.c", "not_"~curdir~"/file.c"));
+
+	assert(testPath("bad/file.c", "bad/"));
+	assert(!testPath("badx/file.c", "bad/"));
+	assert(!testPath("bad/file.c", "badx/"));
+	assert(!testPath("xbad/file.c", "bad/"));
+	assert(!testPath("bad/file.c", "xbad/"));
+	assert(!testPath("good/file.c", "bad/"));
+	assert(testPath("a.c", "/"));
+	assert(testPath("a/b.c", "/"));
 }
