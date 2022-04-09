@@ -158,8 +158,6 @@ string[] dmdArgs = [
 	"-Xcc=-lphobos2",
 ];
 
-string[] gccArgs;
-
 /// sed script to apply fixes after preprocessing
 static immutable cppSedScript = [
 	// -> unbreak glob.h with _FILE_OFFSET_BITS=64
@@ -543,13 +541,11 @@ int cliMain(string[] args)
 	if (compilerMode == Mode.compileOnly)
 	{
 		dmdArgs ~= "-c";
-		gccArgs ~= "-c";
 	}
 
 	if (doOptimize)
 	{
 		dmdArgs ~= ["-O", "-inline"];
-		gccArgs ~= "-O2";
 	}
 
 	string defaultOutFileName()
@@ -580,14 +576,12 @@ int cliMain(string[] args)
 			"can't use -o when compiling more than one object file");
 
 		dmdArgs ~= "-of="~outFile;
-		gccArgs ~= ["-o", outFile];
 	}
 	else if (compilerMode == Mode.compileAndLink)
 	{
 		outFile = defaultOutFileName();
 
 		dmdArgs ~= "-of="~outFile;
-		gccArgs ~= ["-o", outFile];
 	}
 
 	//
@@ -614,23 +608,6 @@ int cliMain(string[] args)
 						strsignal(-rv).fromStringz);
 				xoutput.writefln("importcc: the command line was: %s", escapeCommand(origArgs));
 				xoutput.writefln("importcc: working directory: %s", getcwd());
-			}
-
-			// compilation failed, check if the same command line works with gcc
-			// skip if we added __import since it won't parse
-			// @@ try using macros to remove __import?
-			version(useBuiltinsModule) {}
-			else
-			{
-				File nul = File("/dev/null", "rw");
-				int gccRv = spawnProcess(
-					DefaultCompiler~gccArgs,
-					nul,
-					nul,
-					nul
-				).wait();
-				if (!gccRv)
-					xoutput.writefln("importcc: *** failing command line passes with gcc: %s", escapeCommand(origArgs));
 			}
 
 			// try to warn for misplaced arguments (possibly meant to fix the error)
@@ -758,14 +735,12 @@ void doCommandLineArg(string[] args, out size_t used)
 			return;
 		case "-g":
 			dmdArgs ~= getOption();
-			gccArgs ~= getOption();
 			return;
 		case "-I":
 			cppArgs ~= getOptionAndValue();
 			return;
 		case "-L":
 			dmdArgs ~= "-L-L"~getValue();
-			gccArgs ~= "-L"~getValue();
 			return;
 		case "-O0":
 			doOptimize = false;
@@ -800,7 +775,6 @@ void doCommandLineArg(string[] args, out size_t used)
 			return; // already set
 		case "-fPIE":
 			dmdArgs ~= getOption();
-			gccArgs ~= getOption();
 			return;
 		case "-fpreprocessed":
 			preprocessed = true;
@@ -809,16 +783,13 @@ void doCommandLineArg(string[] args, out size_t used)
 		case "-m64":
 			cppArgs ~= getOption();
 			dmdArgs ~= getOption();
-			gccArgs ~= getOption();
 			return;
 		case "-march=native":
 			dmdArgs ~= "-mcpu=native";
-			gccArgs ~= getOption();
 			return;
 		case "-pthread":
 			cppArgs ~= getOption();
 			dmdArgs ~= "-L-lpthread";
-			gccArgs ~= getOption();
 			return;
 		case "-save-temps":
 			saveTemps = true;
@@ -826,7 +797,6 @@ void doCommandLineArg(string[] args, out size_t used)
 		case "-shared":
 			myEnforce(compilerMode == Mode.compileAndLink, "can't use -shared with -E or -c");
 			dmdArgs ~= getOption();
-			gccArgs ~= getOption();
 			exeType = ExeType.sharedLib;
 			return;
 		case "-std=c89":
@@ -882,13 +852,11 @@ void doCommandLineArg(string[] args, out size_t used)
 
 		case "--default-symver":
 			dmdArgs ~= "-Xcc=-Wl,"~getOption();
-			gccArgs ~= "-Wl,"~getOption();
 			return;
 		case "-rpath":
 		case "-soname":
 		case "-version-script":
 			dmdArgs ~= "-Xcc=-Wl,"~getOption()~','~getValue();
-			gccArgs ~= "-Wl,"~getOption()~','~getValue();
 			return;
 
 		//
@@ -927,13 +895,11 @@ next:
 	if (getOption().startsWith("-L")) // library search path
 	{
 		dmdArgs ~= "-L"~getOption();
-		gccArgs ~= getOption();
 		return;
 	}
 	if (getOption().startsWith("-l")) // link library
 	{
 		dmdArgs ~= "-L"~getOption();
-		gccArgs ~= getOption();
 		return;
 	}
 	if (getOption().startsWith("-U")) // undefine macro
@@ -955,7 +921,6 @@ next:
 	if (getOption().startsWith("-fuse-ld=")) // specify linker to use
 	{
 		dmdArgs ~= "-Xcc="~getOption();
-		gccArgs ~= getOption();
 		return;
 	}
 	if (getOption().startsWith("-Wl,")) // pass flags to linker
@@ -964,7 +929,6 @@ next:
 		//foreach (part; getOption()["-Wl,".length..$].replace(",", " ").splitter)
 		//	dmdArgs ~= "-L"~part;
 		dmdArgs ~= "-Xcc="~getOption();
-		gccArgs ~= getOption();
 		return;
 	}
 	if (getOption().startsWith("-Wno-")) // silence specific warning
@@ -1034,7 +998,6 @@ void addInputFileArg(string path)
 
 			cppFiles[path]  = preprocessedName;
 			dmdArgs        ~= preprocessedName;
-			gccArgs        ~= preprocessedName;
 			junkFiles      ~= preprocessedName;
 			if (outputObjectName != wantedObjectName)
 				objectFilesToRename[outputObjectName] = wantedObjectName;
@@ -1049,7 +1012,6 @@ void addInputFileArg(string path)
 		case ".d":
 		case ".i":
 			dmdArgs ~= path;
-			gccArgs ~= path;
 			dmdFileCount++;
 			dmdSourceFileCount++;
 			break;
@@ -1059,7 +1021,6 @@ void addInputFileArg(string path)
 		case ".o":
 		case ".so":
 			dmdArgs ~= path;
-			gccArgs ~= path;
 			dmdFileCount++;
 			dmdLinkerFileCount++;
 			break;
@@ -1070,7 +1031,6 @@ void addInputFileArg(string path)
 			if (path.baseName.canFind(".so."))
 			{
 				dmdArgs ~= "-L="~path;
-				gccArgs ~= path;
 				dmdFileCount++;
 				dmdLinkerFileCount++;
 				break;
