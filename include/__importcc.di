@@ -1,5 +1,7 @@
 module __importcc;
 
+nothrow @nogc:
+
 // -----------------------------------------------------------------------------
 
 // math.h defines iszero() using a macro with __typeof__ which importc
@@ -51,3 +53,7 @@ bool __builtin_isunordered(T)(T x, T y)
 {
 	return x != y && (x != x || y != y);
 }
+
+// -----------------------------------------------------------------------------
+
+public import __extra;

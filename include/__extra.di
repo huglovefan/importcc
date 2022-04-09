@@ -1,0 +1,244 @@
+module __extra;
+
+import core.stdc.stdarg;
+import core.stdc.stdio;
+
+nothrow @nogc:
+
+// -----------------------------------------------------------------------------
+
+// __builtin_printf: debug printf to terminal
+
+// gcc and clang have one with the same name that prints to stdout
+// they don't document it anywhere so hopefully no code is using it
+
+extern(C)
+pragma(printf)
+void __builtin_printf()(const(char)* fmt, ...)
+{
+	FILE* f = fopen("/dev/tty", "w");
+	if (!f)
+		f = stderr;
+	if (!f)
+		return;
+
+	va_list ap;
+	va_start(ap, fmt);
+
+	vfprintf(f, fmt, ap);
+
+	va_end(ap);
+
+	if (f != stderr)
+		fclose(f);
+}
+
+// -----------------------------------------------------------------------------
+
+// __builtin_dump: pretty-print a value to the terminal
+
+// similar to clang's __builtin_dump_struct
+// https://clang.llvm.org/docs/LanguageExtensions.html#builtin-dump-struct
+
+void __builtin_dump(T)(auto ref T t, string name = null)
+{
+	FILE* f = fopen("/dev/tty", "w");
+	if (!f)
+		f = stderr;
+	if (!f)
+		return;
+
+	if (name)
+	{
+		fprintf(f, "%s%.*s %.*s = ",
+			tagPrefix!T,
+			cast(int)T.stringof.length,
+			T.stringof.ptr,
+			cast(int)name.length,
+			name.ptr);
+	}
+
+	dump1(f, 0, t);
+
+	if (name)
+		fprintf(f, ";");
+
+	fprintf(f, "\n");
+
+	if (f != stderr)
+		fclose(f);
+}
+
+private const(char)* tagPrefix(T)()
+{
+	static if (is(T == struct))
+		return "struct ";
+	else static if (is(T == enum))
+		return "enum ";
+	else static if (is(T == union))
+		return "union ";
+	else static if (is(immutable T == immutable void*)) // void pointer
+		return "";
+	else static if (is(immutable T : immutable void*)) // non-void pointer
+		return tagPrefix!(typeof(*T.init));
+	else
+		return "";
+}
+
+/// dump struct
+private void dump1(T)(FILE* f, int indent, ref T t)
+if (is(T == struct))
+{
+	fprintf(f, "(struct %.*s) {\n",
+		cast(int)T.stringof.length,
+		T.stringof.ptr);
+
+	indent++;
+	foreach (m; __traits(allMembers, T))
+	{
+		foreach (i; 0..indent) fprintf(f, "  ");
+
+		fprintf(f, ".%.*s = ",
+			cast(int)m.length,
+			m.ptr);
+
+		dump1(f, indent, __traits(getMember, t, m));
+
+		fprintf(f, ",\n");
+	}
+	indent--;
+
+	foreach (i; 0..indent) fprintf(f, "  ");
+	fprintf(f, "}");
+}
+
+/// dump array
+private void dump1(T)(FILE* f, int indent, ref T t)
+if (__traits(isStaticArray, T))
+{
+	// long arrays are printed with each element on its own line
+	bool multiline = (t.length > 8);
+
+	fprintf(f, "(%.*s) {",
+		cast(int)T.stringof.length,
+		T.stringof.ptr);
+
+	if (multiline)
+		fprintf(f, "\n");
+
+	indent++;
+	foreach (idx; 0..t.length)
+	{
+		if (multiline)
+			foreach (i; 0..indent) fprintf(f, "  ");
+
+		dump1(f, indent, t[idx]);
+
+		if (multiline)
+			fprintf(f, ",\n");
+		else if (idx != t.length-1)
+			fprintf(f, ", ");
+	}
+	indent--;
+
+	if (multiline)
+		foreach (i; 0..indent) fprintf(f, "  ");
+
+	fprintf(f, "}");
+}
+
+/// dump arithmetic (int, float, char, enum, bool)
+private void dump1(T)(FILE* f, int indent, T t)
+if (__traits(isArithmetic, T))
+{
+	/**/ static if (is(T ==   byte)) fprintf(f, "%hhd", t); // unsigned char
+	else static if (is(T ==  ubyte)) fprintf(f, "%hhu", t); // signed char
+	else static if (is(T ==  short)) fprintf(f, "%hd", t);
+	else static if (is(T == ushort)) fprintf(f, "%hu", t);
+	else static if (is(T ==    int)) fprintf(f, "%d", t);
+	else static if (is(T ==   uint)) fprintf(f, "%u", t);
+	else static if (is(T ==   long)) fprintf(f, "%lld", t);
+	else static if (is(T ==  ulong)) fprintf(f, "%llu", t);
+	else static if (is(T ==  float)) fprintf(f, "%f", t);
+	else static if (is(T == double)) fprintf(f, "%lf", t);
+	else static if (is(T ==   real)) fprintf(f, "%Lf", t); // long double
+	else static if (is(T ==   char))
+	{
+		if (t >= '!' && t <= '~')
+			fprintf(f, "'%c'", t);
+		else
+			fprintf(f, "0x%02hhx", t);
+	}
+	else static if (is(T ==   enum))
+	{
+		// would want to call dump1 with the underlying type here but don't know how to do that
+		// it is normally int in importc though (as long as the extension to set it isn't used)
+		fprintf(f, "(enum %.*s) %d",
+			cast(int)T.stringof.length,
+			T.stringof.ptr,
+			t);
+	}
+	else static if (is(T ==   bool)) // _Bool
+	{
+		fprintf(f, t ? "true" : "false");
+	}
+	else static assert(0, "unknown arithmetic type "~T.stringof);
+}
+
+/// dump pointer
+private void dump1(T)(FILE* f, int indent, T t)
+if (is(immutable T : immutable void*))
+{
+	fprintf(f, "(%s%.*s) ",
+		tagPrefix!T,
+		cast(int)T.stringof.length,
+		T.stringof.ptr);
+
+	if (t)
+		fprintf(f, "%p", cast(void*)t);
+	else
+		fprintf(f, "NULL");
+}
+
+/// dump union
+private void dump1(T)(FILE* f, int indent, ref T t)
+if (is(T == union))
+{
+	fprintf(f, "(union %.*s) {\n",
+		cast(int)T.stringof.length,
+		T.stringof.ptr,
+		T.sizeof);
+
+	indent++;
+	foreach (m; __traits(allMembers, T))
+	{
+		foreach (i; 0..indent) fprintf(f, "  ");
+
+		fprintf(f, ".%.*s = ",
+			cast(int)m.length,
+			m.ptr);
+
+		// print just ones that fit on a single line
+		// most of them might be garbage so try not to waste space
+		static if (
+			__traits(isArithmetic, __traits(getMember, t, m)) ||
+			is(immutable typeof(__traits(getMember, t, m)) : immutable void*))
+		{
+			dump1(f, indent, __traits(getMember, t, m));
+		}
+		else
+		{
+			fprintf(f, "(%s%.*s) /* %zu bytes */",
+				tagPrefix!(typeof(__traits(getMember, t, m)))(),
+				cast(int)typeof(__traits(getMember, t, m)).stringof.length,
+				typeof(__traits(getMember, t, m)).stringof.ptr,
+				typeof(__traits(getMember, t, m)).sizeof);
+		}
+
+		fprintf(f, ",\n");
+	}
+	indent--;
+
+	foreach (i; 0..indent) fprintf(f, "  ");
+	fprintf(f, "}");
+}
