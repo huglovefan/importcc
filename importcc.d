@@ -144,6 +144,7 @@ string[] cppArgs = [
 	// libraries
 	//
 
+	"-DLONG_LONG=long long", // libdumb
 	"-DNO_DECLTYPE", // uthash
 ];
 
