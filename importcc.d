@@ -1086,17 +1086,34 @@ string suitableInputFile(string path)
 	string dir = path.dirName;
 	string base = path.baseName.stripExtension;
 
-	// name only contains extension (.extension returns empty in that case)
+	// (fix "base" if name contains only extension)
 	if (!path.extension.length)
 		base = "";
 
-	// cast: work with gdc 10
+	// strip non-alphanumeric characters
+	// (cast: work with gdc 10)
 	base = base.map!(c => std.ascii.isAlphaNum(c) ? c : cast(dchar)'_').to!string;
 
-	if (!base.length || std.ascii.isDigit(base[0]) ||
-		base == "object")
+	// must not start with a digit (or be empty)
+	if (!base.length || std.ascii.isDigit(base[0]))
 	{
 		base = '_'~base;
+	}
+
+	// must not conflict with imported modules
+	switch (base)
+	{
+		case "__builtins":
+		case "__extra":    // importcc
+		case "__importcc": // importcc
+		case "core":
+		case "etc":
+		case "object":
+		case "std":
+			base = '_'~base;
+			break;
+		default:
+			break;
 	}
 
 	path = dir~'/'~base~".i";
