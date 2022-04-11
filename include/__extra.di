@@ -1,21 +1,27 @@
 module __extra;
 
-import core.stdc.stdarg;
-import core.stdc.stdio;
-
 nothrow @nogc:
 
 // -----------------------------------------------------------------------------
 
 // __builtin_printf: debug printf to terminal
 
-// gcc and clang have one with the same name that prints to stdout
-// they don't document it anywhere so hopefully no code is using it
+// bug: name collides with gcc __builtin_printf()
+
+template __builtin_printf()
+{
+
+// https://issues.dlang.org/show_bug.cgi?id=22767
+// has to be outside the function
+version(X86_64) import core.internal.vararg.sysv_x64 : __va_list_tag;
 
 extern(C)
 pragma(printf)
-void __builtin_printf()(const(char)* fmt, ...)
+void __builtin_printf(const(char)* fmt, ...)
 {
+	import core.stdc.stdarg;
+	import core.stdc.stdio;
+
 	FILE* f = fopen("/dev/tty", "w");
 	if (!f)
 		f = stderr;
@@ -33,6 +39,8 @@ void __builtin_printf()(const(char)* fmt, ...)
 		fclose(f);
 }
 
+}
+
 // -----------------------------------------------------------------------------
 
 // __builtin_dump: pretty-print a value to the terminal
@@ -42,6 +50,8 @@ void __builtin_printf()(const(char)* fmt, ...)
 
 void __builtin_dump(T)(auto ref T t, string name = null)
 {
+	import core.stdc.stdio;
+
 	FILE* f = fopen("/dev/tty", "w");
 	if (!f)
 		f = stderr;
@@ -86,9 +96,11 @@ private const(char)* tagPrefix(T)()
 }
 
 /// dump struct
-private void dump1(T)(FILE* f, int indent, ref T t)
+private void dump1(T)(imported!"core.stdc.stdio".FILE* f, int indent, ref T t)
 if (is(T == struct))
 {
+	import core.stdc.stdio;
+
 	fprintf(f, "(struct %.*s) {\n",
 		cast(int)T.stringof.length,
 		T.stringof.ptr);
@@ -113,9 +125,11 @@ if (is(T == struct))
 }
 
 /// dump array
-private void dump1(T)(FILE* f, int indent, ref T t)
+private void dump1(T)(imported!"core.stdc.stdio".FILE* f, int indent, ref T t)
 if (__traits(isStaticArray, T))
 {
+	import core.stdc.stdio;
+
 	// long arrays are printed with each element on its own line
 	bool multiline = (t.length > 8);
 
@@ -148,9 +162,11 @@ if (__traits(isStaticArray, T))
 }
 
 /// dump arithmetic (int, float, char, enum, bool)
-private void dump1(T)(FILE* f, int indent, T t)
+private void dump1(T)(imported!"core.stdc.stdio".FILE* f, int indent, T t)
 if (__traits(isArithmetic, T))
 {
+	import core.stdc.stdio;
+
 	/**/ static if (is(T ==   byte)) fprintf(f, "%hhd", t); // unsigned char
 	else static if (is(T ==  ubyte)) fprintf(f, "%hhu", t); // signed char
 	else static if (is(T ==  short)) fprintf(f, "%hd", t);
@@ -186,9 +202,11 @@ if (__traits(isArithmetic, T))
 }
 
 /// dump pointer
-private void dump1(T)(FILE* f, int indent, T t)
+private void dump1(T)(imported!"core.stdc.stdio".FILE* f, int indent, T t)
 if (is(immutable T : immutable void*))
 {
+	import core.stdc.stdio;
+
 	fprintf(f, "(%s%.*s) ",
 		tagPrefix!T,
 		cast(int)T.stringof.length,
@@ -201,9 +219,11 @@ if (is(immutable T : immutable void*))
 }
 
 /// dump union
-private void dump1(T)(FILE* f, int indent, ref T t)
+private void dump1(T)(imported!"core.stdc.stdio".FILE* f, int indent, ref T t)
 if (is(T == union))
 {
+	import core.stdc.stdio;
+
 	fprintf(f, "(union %.*s) {\n",
 		cast(int)T.stringof.length,
 		T.stringof.ptr,
