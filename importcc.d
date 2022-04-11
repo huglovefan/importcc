@@ -135,8 +135,13 @@ string[] cppArgs = [
 	// @@ implement in builtins if something needs this
 	"-D_ASM_X86_SWAB_H",
 
-	// uses inline functions which pollute object files, implemented using
-	//  templates in __importcc.di
+	// headers that fail to parse
+	"-D_ASM_X86_SWAB_H", // unconditionally uses __asm__
+	"-D_EMMINTRIN_H_INCLUDED", // unconditionally uses mmx builtins
+	"-D_MMINTRIN_H_INCLUDED", // unconditionally uses sse builtins
+	"-D_XMMINTRIN_H_INCLUDED", // unconditionally uses sse2 builtins
+
+	// headers that use inline functions (implemented as templates in __importcc.di)
 	"-D_BITS_BYTESWAP_H",
 	"-D_BITS_UINTN_IDENTITY_H",
 
