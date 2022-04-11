@@ -4,40 +4,14 @@ nothrow @nogc:
 
 // -----------------------------------------------------------------------------
 
-// math.h uses either __builtin_* for these (with gcc version macros) or
-//  fallbacks using gnu statement expressions which importc doesn't support
+// https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
 
-// define the builtins here and hand-edit code to use them
-
-bool __builtin_isgreater(T)(T x, T y)
-{
-	return x > y;
-}
-
-bool __builtin_isgreaterequal(T)(T x, T y)
-{
-	return x >= y;
-}
-
-bool __builtin_isless(T)(T x, T y)
-{
-	return x < y;
-}
-
-bool __builtin_islessequal(T)(T x, T y)
-{
-	return x <= y;
-}
-
-bool __builtin_islessgreater(T)(T x, T y)
-{
-	return !__builtin_isunordered(x, y) && x != y;
-}
-
-bool __builtin_isunordered(T)(T x, T y)
-{
-	return x != y && (x != x || y != y);
-}
+alias __builtin_isgreater()      = imported!"core.stdc.math".isgreater;
+alias __builtin_isgreaterequal() = imported!"core.stdc.math".isgreaterequal;
+alias __builtin_isless()         = imported!"core.stdc.math".isless;
+alias __builtin_islessequal()    = imported!"core.stdc.math".islessequal;
+alias __builtin_islessgreater()  = imported!"core.stdc.math".islessgreater;
+alias __builtin_isunordered()    = imported!"core.stdc.math".isunordered;
 
 // -----------------------------------------------------------------------------
 
