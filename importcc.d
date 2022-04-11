@@ -116,6 +116,9 @@ string[] cppArgs = [
 
 	"-D__FUNCTION__=__builtin_FUNCTION",
 
+	// bug: this evaluates the argument twice
+	"-Dstrdupa(x)=__builtin_strdupa((x),__builtin_alloca(__builtin_strlen((x))+1))",
+
 	//
 	// glibc
 	//

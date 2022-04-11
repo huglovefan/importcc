@@ -93,6 +93,7 @@ mustcompile ../tests/includes.c -D_FILE_OFFSET_BITS=64
 
 mustrun     ../tests/alloca.c
 mustrun     ../tests/fileio.c
+mustrun     ../tests/strdupa.c
 
 mustcompile  ../tests/builtin_dump.c
 

@@ -46,6 +46,11 @@ bool __builtin_umulll_overflow()(ulong a, ulong b, ulong* res)
 
 // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
 
+alias __builtin_alloca() = imported!"core.stdc.stdlib".alloca;
+
+alias __builtin_memcpy() = imported!"core.stdc.string".memcpy;
+alias __builtin_strlen() = imported!"core.stdc.string".strlen;
+
 alias __builtin_isgreater()      = imported!"core.stdc.math".isgreater;
 alias __builtin_isgreaterequal() = imported!"core.stdc.math".isgreaterequal;
 alias __builtin_isless()         = imported!"core.stdc.math".isless;

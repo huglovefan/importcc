@@ -19,6 +19,18 @@ bool __builtin_iszero(T)(T v)
 
 // -----------------------------------------------------------------------------
 
+// builtin to support implementing strdupa() using a macro
+// this is called like __builtin_strdupa(s, alloca(strlen(s)+1))
+
+char* __builtin_strdupa()(const(char)* s, void* storage)
+{
+	size_t sz = __builtin_strlen(s)+1;
+	__builtin_memcpy(storage, s, sz);
+	return cast(char*)storage;
+}
+
+// -----------------------------------------------------------------------------
+
 // reimplement some inline functions here to prevent them from polluting object files
 // the #include guards for these files have been defined in importcc.d
 
