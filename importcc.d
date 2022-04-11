@@ -98,6 +98,7 @@ string[] cppArgs = [
 	//
 
 	// https://github.com/dlang/druntime/blob/master/src/importc.h
+	"-D__IMPORTC__",
 	"-D__builtin_offsetof(t,i)=((unsigned long)((char *)&((t *)0)->i - (char *)0))",
 
 	"-D__alignof=_Alignof",
