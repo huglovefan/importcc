@@ -4,6 +4,105 @@ nothrow @nogc:
 
 // -----------------------------------------------------------------------------
 
+// 6.55 Built-in Functions for Memory Model Aware Atomic Operations
+
+// https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
+
+enum int __ATOMIC_RELAXED = 0;
+enum int __ATOMIC_CONSUME = 1; // same as __ATOMIC_ACQUIRE
+enum int __ATOMIC_ACQUIRE = 2;
+enum int __ATOMIC_RELEASE = 3;
+enum int __ATOMIC_ACQ_REL = 4;
+enum int __ATOMIC_SEQ_CST = 5;
+
+type __atomic_load_n(type)(type* ptr, int memorder)
+if (__traits(isIntegral, type) || is(immutable type : immutable void*))
+{
+	import core.atomic;
+
+	final switch (memorder)
+	{
+		case __ATOMIC_RELAXED: return atomicLoad!(MemoryOrder.raw)(*ptr);
+		case __ATOMIC_SEQ_CST: return atomicLoad!(MemoryOrder.seq)(*ptr);
+		case __ATOMIC_ACQUIRE: return atomicLoad!(MemoryOrder.acq)(*ptr);
+		case __ATOMIC_CONSUME: goto case __ATOMIC_ACQUIRE;
+	}
+}
+
+void __atomic_store_n(type)(type* ptr, type val, int memorder)
+if (__traits(isIntegral, type) || is(immutable type : immutable void*))
+{
+	import core.atomic;
+
+	final switch (memorder)
+	{
+		case __ATOMIC_RELAXED: return atomicStore!(MemoryOrder.raw)(*ptr, val);
+		case __ATOMIC_SEQ_CST: return atomicStore!(MemoryOrder.seq)(*ptr, val);
+		case __ATOMIC_RELEASE: return atomicStore!(MemoryOrder.rel)(*ptr, val);
+	}
+}
+
+type __atomic_add_fetch(type)(type* ptr, type val, int memorder)
+if (__traits(isIntegral, type))
+{
+	import core.atomic;
+
+	static if (!__traits(isUnsigned, type))
+		assert(val >= 0); // casted to size_t, must be positive
+
+	// returns the new value
+	// note: usage with pointer arguments not implemented (must not scale by type size)
+	final switch (memorder)
+	{
+		case __ATOMIC_RELAXED: return atomicFetchAdd!(MemoryOrder.raw)    (*ptr, val)+val;
+		case __ATOMIC_CONSUME: goto case __ATOMIC_ACQUIRE;
+		case __ATOMIC_ACQUIRE: return atomicFetchAdd!(MemoryOrder.acq)    (*ptr, val)+val;
+		case __ATOMIC_RELEASE: return atomicFetchAdd!(MemoryOrder.rel)    (*ptr, val)+val;
+		case __ATOMIC_ACQ_REL: return atomicFetchAdd!(MemoryOrder.acq_rel)(*ptr, val)+val;
+		case __ATOMIC_SEQ_CST: return atomicFetchAdd!(MemoryOrder.seq)    (*ptr, val)+val;
+	}
+}
+
+type __atomic_sub_fetch(type)(type* ptr, type val, int memorder)
+if (__traits(isIntegral, type))
+{
+	import core.atomic;
+
+	static if (!__traits(isUnsigned, type))
+		assert(val >= 0); // casted to size_t, must be positive
+
+	// returns the new value
+	// note: usage with pointer arguments not implemented (must not scale by type size)
+	final switch (memorder)
+	{
+		case __ATOMIC_RELAXED: return atomicFetchSub!(MemoryOrder.raw)    (*ptr, val)-val;
+		case __ATOMIC_CONSUME: goto case __ATOMIC_ACQUIRE;
+		case __ATOMIC_ACQUIRE: return atomicFetchSub!(MemoryOrder.acq)    (*ptr, val)-val;
+		case __ATOMIC_RELEASE: return atomicFetchSub!(MemoryOrder.rel)    (*ptr, val)-val;
+		case __ATOMIC_ACQ_REL: return atomicFetchSub!(MemoryOrder.acq_rel)(*ptr, val)-val;
+		case __ATOMIC_SEQ_CST: return atomicFetchSub!(MemoryOrder.seq)    (*ptr, val)-val;
+	}
+}
+
+bool __atomic_test_and_set(type)(type* ptr, int memorder)
+if (__traits(isIntegral, type) && type.sizeof == 1)
+{
+	import core.atomic;
+
+	// gcc stores 1, returns true if old value non-zero
+	final switch (memorder)
+	{
+		case __ATOMIC_RELAXED: return !!atomicExchange!(MemoryOrder.raw)    (ptr, type(1));
+		case __ATOMIC_CONSUME: goto case __ATOMIC_ACQUIRE;
+		case __ATOMIC_ACQUIRE: return !!atomicExchange!(MemoryOrder.acq)    (ptr, type(1));
+		case __ATOMIC_RELEASE: return !!atomicExchange!(MemoryOrder.rel)    (ptr, type(1));
+		case __ATOMIC_ACQ_REL: return !!atomicExchange!(MemoryOrder.acq_rel)(ptr, type(1));
+		case __ATOMIC_SEQ_CST: return !!atomicExchange!(MemoryOrder.seq)    (ptr, type(1));
+	}
+}
+
+// -----------------------------------------------------------------------------
+
 // 6.56 Built-in Functions to Perform Arithmetic with Overflow Checking
 
 // https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html

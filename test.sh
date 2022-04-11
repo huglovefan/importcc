@@ -95,6 +95,7 @@ mustrun     ../tests/alloca.c
 mustrun     ../tests/fileio.c
 mustrun     ../tests/strdupa.c
 
+mustrun      ../tests/builtins.c
 mustcompile  ../tests/builtin_dump.c
 
 # non-writable source directory
