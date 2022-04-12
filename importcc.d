@@ -142,10 +142,10 @@ string[] cppArgs = [
 	"-U__GNUC_MINOR__",
 	"-U__GNUC_PATCHLEVEL__",
 
-	// fix functions using off_t
-	// with _FILE_OFFSET_BITS=64 but no __REDIRECT support, functions are
-	//  macro'd to use 64-bit versions, but those are only visible with
-	//  this macro
+	// fix functions that use off_t
+	// with _FILE_OFFSET_BITS=64 but no __REDIRECT support, the functions are
+	//  macro'd to use 64-bit versions as a fallback (like lseek -> lseek64) but
+	//  the declarations for those are only visible with this macro
 	"-D_GNU_SOURCE",
 
 	// headers that fail to parse
@@ -340,7 +340,7 @@ do
 	{
 		xoutput.opentty();
 
-		xoutput.writefln("importcc: *** halt file %s reached ***", e.cause);
+		xoutput.writefln("importcc: *** reached halt file %s ***", e.cause);
 		xoutput.writefln("importcc: command line: %s", escapeCommand(args));
 		xoutput.writefln("importcc: working directory: %s", getcwd());
 		xoutput.write('\a');
