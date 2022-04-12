@@ -31,6 +31,19 @@ char* __builtin_strdupa()(const(char)* s, void* storage)
 
 // -----------------------------------------------------------------------------
 
+// similar to __builtin_FUNCTION() but returns "top level" when outside a function
+
+// gcc includes the return type and parameters in this when compiling C++, clang
+//  does it for C too
+
+const(char)* __builtin_PRETTY_FUNCTION(string func = __PRETTY_FUNCTION__)()
+{
+	pragma(inline, true);
+	return func.length ? func.ptr : "top level".ptr;
+}
+
+// -----------------------------------------------------------------------------
+
 // reimplement some inline functions here to prevent them from polluting object files
 // the #include guards for these files have been defined in importcc.d
 

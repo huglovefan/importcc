@@ -97,6 +97,7 @@ mustrun     ../tests/strdupa.c
 
 mustrun      ../tests/builtins.c
 mustcompile  ../tests/builtin_dump.c
+mustrun      ../tests/funcname.c
 
 # non-writable source directory
 mustcompile /usr/include/stdlib.h

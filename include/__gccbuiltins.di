@@ -189,5 +189,21 @@ alias __builtin_isunordered()    = imported!"core.stdc.math".isunordered;
 
 const(char)* __builtin_FUNCTION(string func = __FUNCTION__)()
 {
-	return func.ptr;
+	pragma(inline, true);
+
+	// remove the D module name from the string
+	enum x = (){
+		size_t dotpos = -1;
+		foreach_reverse (i, c; func)
+		{
+			if (c == '.')
+			{
+				dotpos = i;
+				break;
+			}
+		}
+		return dotpos != -1 ? func[dotpos+1..$] : func;
+	}();
+
+	return x.ptr;
 }
