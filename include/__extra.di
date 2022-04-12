@@ -167,25 +167,25 @@ if (__traits(isArithmetic, T))
 {
 	import core.stdc.stdio;
 
-	/**/ static if (is(T ==   byte)) fprintf(f, "%hhd", t); // unsigned char
-	else static if (is(T ==  ubyte)) fprintf(f, "%hhu", t); // signed char
-	else static if (is(T ==  short)) fprintf(f, "%hd", t);
-	else static if (is(T == ushort)) fprintf(f, "%hu", t);
-	else static if (is(T ==    int)) fprintf(f, "%d", t);
-	else static if (is(T ==   uint)) fprintf(f, "%u", t);
-	else static if (is(T ==   long)) fprintf(f, "%lld", t);
-	else static if (is(T ==  ulong)) fprintf(f, "%llu", t);
-	else static if (is(T ==  float)) fprintf(f, "%f", t);
-	else static if (is(T == double)) fprintf(f, "%lf", t);
-	else static if (is(T ==   real)) fprintf(f, "%Lf", t); // long double
-	else static if (is(T ==   char))
+	/**/ static if (is(T ==    byte)) fprintf(f, "%hhd", t); // unsigned char
+	else static if (is(T ==   ubyte)) fprintf(f, "%hhu", t); // signed char
+	else static if (is(T ==   short)) fprintf(f, "%hd", t);
+	else static if (is(T ==  ushort)) fprintf(f, "%hu", t);
+	else static if (is(T ==     int)) fprintf(f, "%d", t);
+	else static if (is(T ==    uint)) fprintf(f, "%u", t);
+	else static if (is(T ==    long)) fprintf(f, "%lld", t);
+	else static if (is(T ==   ulong)) fprintf(f, "%llu", t);
+	else static if (is(T ==   float)) fprintf(f, "%f", t);
+	else static if (is(T ==  double)) fprintf(f, "%lf", t);
+	else static if (is(T ==    real)) fprintf(f, "%Lf", t); // long double
+	else static if (is(T ==    char))
 	{
 		if (t >= '!' && t <= '~')
 			fprintf(f, "'%c'", t);
 		else
 			fprintf(f, "0x%02hhx", t);
 	}
-	else static if (is(T ==   enum))
+	else static if (is(T ==    enum))
 	{
 		// would want to call dump1 with the underlying type here but don't know how to do that
 		// it is normally int in importc though (as long as the extension to set it isn't used)
@@ -194,10 +194,16 @@ if (__traits(isArithmetic, T))
 			T.stringof.ptr,
 			t);
 	}
-	else static if (is(T ==   bool)) // _Bool
+	else static if (is(T ==    bool)) // _Bool
 	{
 		fprintf(f, t ? "true" : "false");
 	}
+	else static if (is(T ==  cfloat)) fprintf(f, "%f%+fi", t.re, t.im);
+	else static if (is(T == cdouble)) fprintf(f, "%lf%+lfi", t.re, t.im);
+	else static if (is(T ==   creal)) fprintf(f, "%Lf%+Lfi", t.re, t.im);
+	else static if (is(T ==  ifloat)) fprintf(f, "%+fi", t);
+	else static if (is(T == idouble)) fprintf(f, "%+lfi", t);
+	else static if (is(T ==   ireal)) fprintf(f, "%+Lfi", t);
 	else static assert(0, "unknown arithmetic type "~T.stringof);
 }
 

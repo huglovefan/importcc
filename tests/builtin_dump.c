@@ -48,9 +48,23 @@ struct A a = {
 	1,
 };
 
+struct {
+	int x;
+	_Complex float mycfloat;
+	_Complex double mycdouble;
+	_Complex long double mycreal;
+	_Imaginary float myifloat;
+	_Imaginary double myidouble;
+	_Imaginary long double myireal;
+} junk = {
+	0,
+};
+
 int main()
 {
 	__builtin_dump(a, "test_mutable");
 	const struct A *ap = &a;
 	__builtin_dump(*ap, "test_const");
+
+	__builtin_dump(junk);
 }
