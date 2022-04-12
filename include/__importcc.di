@@ -4,15 +4,11 @@ nothrow @nogc:
 
 // -----------------------------------------------------------------------------
 
-// math.h defines iszero() using a macro with __typeof__ which importc
-//  doesn't support
+// definition in math.h uses GNU extensions and isn't fixable by macros
+// hand-edit code to use this
 
-// define the builtin here and hand-edit code to use it
-
-// note: there are two implementations, this assumes __SUPPORT_SNAN__=0
-//  (whatever that is)
-
-bool __builtin_iszero(T)(T v)
+int __builtin_iszero(T)(T v)
+if (__traits(isFloating, T))
 {
 	return v == 0;
 }
