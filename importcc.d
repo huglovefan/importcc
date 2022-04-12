@@ -94,6 +94,18 @@ string[] cppArgs = [
 	"-w", // no warnings
 
 	//
+	// language features
+	//
+
+	// char is unsigned in importc
+	// this macro is defined when using "gcc -fno-signed-char"
+	"-D__CHAR_UNSIGNED__",
+
+	// http://port70.net/~nsz/c/c11/n1570.html#6.10.8.3
+	"-D__STDC_NO_ATOMICS__",
+	"-D__STDC_NO_VLA__",
+
+	//
 	// builtins
 	//
 
