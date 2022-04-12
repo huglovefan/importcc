@@ -148,10 +148,6 @@ string[] cppArgs = [
 	//  this macro
 	"-D_GNU_SOURCE",
 
-	// header unconditionally uses __asm__
-	// @@ implement in builtins if something needs this
-	"-D_ASM_X86_SWAB_H",
-
 	// headers that fail to parse
 	"-D_ASM_X86_SWAB_H", // unconditionally uses __asm__
 	"-D_EMMINTRIN_H_INCLUDED", // unconditionally uses mmx builtins
