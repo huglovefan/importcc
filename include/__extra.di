@@ -185,14 +185,13 @@ if (__traits(isArithmetic, T))
 		else
 			fprintf(f, "0x%02hhx", t);
 	}
-	else static if (is(T ==    enum))
+	else static if (is(T X ==  enum))
 	{
-		// would want to call dump1 with the underlying type here but don't know how to do that
-		// it is normally int in importc though (as long as the extension to set it isn't used)
-		fprintf(f, "(enum %.*s) %d",
+		fprintf(f, "(enum %.*s) ",
 			cast(int)T.stringof.length,
-			T.stringof.ptr,
-			t);
+			T.stringof.ptr);
+		// dump as underlying type
+		dump1!X(f, indent, t);
 	}
 	else static if (is(T ==    bool)) // _Bool
 	{

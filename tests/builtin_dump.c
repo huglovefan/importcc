@@ -1,9 +1,12 @@
 // test that __builtin_dump() works
 
+typedef enum Bb { bb=2, } Bbb;
+
 struct A
 {
 	int x, y;
-	enum E { Ee = 22, } e;
+	enum Bb asdasd;
+	enum Aa : Bbb { aa=1, } e;
 	int ints[3];
 	char *str;
 	void *np;
@@ -31,7 +34,8 @@ void dummy(){}
 
 struct A a = {
 	123, 456,
-	Ee,
+	bb,
+	aa,
 	{ 5, 4, 3 },
 	"hello",
 	0,
