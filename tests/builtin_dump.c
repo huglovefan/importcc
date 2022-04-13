@@ -28,6 +28,7 @@ struct A
 	struct { int hello; } inner;
 	unsigned int bits : 2;
 	_Bool c11bool;
+	const char c;
 };
 
 void dummy(){}
@@ -50,6 +51,7 @@ struct A a = {
 	{0},
 	2,
 	1,
+	'x',
 };
 
 struct {

@@ -162,10 +162,15 @@ if (__traits(isStaticArray, T))
 }
 
 /// dump arithmetic (int, float, char, enum, bool)
-private void dump1(T)(imported!"core.stdc.stdio".FILE* f, int indent, T t)
-if (__traits(isArithmetic, T))
+private void dump1(T_)(imported!"core.stdc.stdio".FILE* f, int indent, T_ t)
+if (__traits(isArithmetic, T_))
 {
 	import core.stdc.stdio;
+
+	// the type might have "const" here, remove it so the matching works
+	// this can happen with e.g. "const int" inside a struct
+	alias Unconst(T : const U, U) = U;
+	alias T = Unconst!T_;
 
 	/**/ static if (is(T ==    byte)) fprintf(f, "%hhd", t); // unsigned char
 	else static if (is(T ==   ubyte)) fprintf(f, "%hhu", t); // signed char
