@@ -28,56 +28,33 @@ echo "supported bits:" $bits
 g_rv=0
 mustrun()
 {
-	if hasbitness "$@"
-	then
-		$V importcc "$@" -o a.out && ./a.out
-		check mustrun "$@"
-	else
-		for m in $bits
-		do
-			$V importcc -m$m "$@" -o a.out && ./a.out
-			check mustrun -m$m "$@"
-		done
-		## check just compilation for unsupported bits
-		for m in $nobits
-		do
-			$V importcc -m$m -c "$@"
-			check mustcompile "$@"
-		done
-	fi
+	for m in $bits
+	do
+		$V importcc -m$m "$@" -o a.out && ./a.out
+		check mustrun -m$m "$@"
+	done
+	## check just compilation for unsupported bits
+	for m in $nobits
+	do
+		$V importcc -m$m -c "$@"
+		check mustcompile "$@"
+	done
 }
 mustcompile()
 {
-	if hasbitness "$@"
-	then
-		$V importcc -c "$@"
+	for m in $bits $nobits
+	do
+		$V importcc -m$m -c "$@"
 		check mustcompile "$@"
-	else
-		for m in $bits $nobits
-		do
-			$V importcc -m$m -c "$@"
-			check mustcompile "$@"
-		done
-	fi
+	done
 }
 check()
 {
 	if rv=$?; [ $rv -ne 0 ]
 	then
-		name=$1; shift
-		>&2 echo "*** test failed: '$name $*' exited with status $rv"
+		>&2 echo "*** test failed: '$*' exited with status $rv"
 		g_rv=1
 	fi
-}
-hasbitness()
-{
-	for arg
-	do
-		case $arg in
-		-m64|-m32) return 0;;
-		esac
-	done
-	return 1
 }
 
 mustrun     ../tests/true.c
