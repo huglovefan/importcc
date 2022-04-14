@@ -115,6 +115,8 @@ string[] cppArgs = [
 
 	"-D__alignof=_Alignof",
 	"-D__alignof__=_Alignof",
+	"-D__asm=asm",
+	"-D__asm__=asm",
 	"-D__attribute=__attribute__",
 	"-D__extension__=",
 	"-D__inline=inline",
@@ -142,11 +144,11 @@ string[] cppArgs = [
 	"-U__GNUC_MINOR__",
 	"-U__GNUC_PATCHLEVEL__",
 
-	// fix functions that use off_t
-	// with _FILE_OFFSET_BITS=64 but no __REDIRECT support, the functions are
-	//  macro'd to use 64-bit versions as a fallback (like lseek -> lseek64) but
-	//  the declarations for those are only visible with this macro
-	"-D_GNU_SOURCE",
+	// glibc's "pragma(mangle)"
+	"-D__REDIRECT(name, proto, alias)=name proto asm(#alias)",
+	// versions with gcc attributes (leaf, nothrow)
+	"-D__REDIRECT_NTH=__REDIRECT",
+	"-D__REDIRECT_NTHNL=__REDIRECT",
 
 	// headers that fail to parse
 	"-D_ASM_X86_SWAB_H", // unconditionally uses __asm__
@@ -181,16 +183,7 @@ string[] dmdArgs = [
 ];
 
 /// sed script to apply fixes after preprocessing
-static immutable cppSedScript = [
-	// -> unbreak glob.h with _FILE_OFFSET_BITS=64
-	// it uses __REDIRECT_NTH without checking if it's supported
-	// glob uses off_t for some optional callbacks which are a gnu extension
-	// @@@ this'll break if something actually uses the extensions
-	// @@@ check by: rg -g '!*.i' 'GLOB_ALTDIRFUNC'
-	r"s/^extern void __REDIRECT_NTH (globfree, (glob_t \*__pglob), globfree64);$/extern void globfree(glob_t *__pglob);/",
-	r"s/^extern int __REDIRECT_NTH (glob, (const char \*restrict __pattern,$/extern int glob(const char *restrict __pattern,/",
-	r"s/^      glob_t \*restrict __pglob), glob64);$/      glob_t *restrict __pglob);/",
-].join('\n');
+static immutable string cppSedScript = "";
 
 struct xoutput
 {
@@ -418,130 +411,17 @@ int cliMain(string[] args)
 	//
 	if (cppFiles.length)
 	{
-		if (compilerMode == Mode.preprocessOnly)
-		// with -E, all output goes in a single file (stdout or set by -o)
+		int rv;
+		static if (cppSedScript.length)
 		{
-			File output = stdout;
-			if (outFile)
-			{
-				try
-					output = File(outFile, "w");
-				catch (ErrnoException e)
-					myEnforce(false, "failed to open output file: "~e.msg);
-			}
-
-			// start sed
-
-			if (V)
-				printCommand(["sed", cppSedScript]);
-
-			Pipe sedInput = pipe();
-			Pid sed = spawnProcess(
-				["sed", cppSedScript],
-				sedInput.readEnd,
-				output
-			);
-
-			// preprocess each file and feed the output to sed
-
-			bool error;
-
-			foreach (file, _; cppFiles)
-			{
-				if (V)
-					printCommand("cpp"~cppArgs~file);
-
-				int rv = spawnProcess(
-					"cpp"~cppArgs~file,
-					/* stdin  */ stdin,
-					/* stdout */ sedInput.writeEnd,
-					/* stderr */ stderr,
-					/* cwd    */ null,
-					/* flags  */ Config.retainStdout // closed manually
-				).wait();
-
-				if (rv)
-				{
-					error = true;
-					xoutput.writefln("importcc: cpp exited with status %s", rv);
-					break;
-				}
-			}
-
-			// close pipe and wait for sed to finish
-
-			sedInput.close();
-			if (int rv = sed.wait())
-			{
-				error = true;
-				xoutput.writefln("importcc: sed exited with status %s", rv);
-			}
-
-			if (error)
-				return 1;
+			pragma(msg, "note: preprocessing with sed script");
+			rv = runCppWithSed();
 		}
 		else
-		// no -E, preprocess individual files to be used in compilation
-		{
-			foreach (file, cppOutFile; cppFiles)
-			{
-				File output;
-				try
-					output = File(cppOutFile, "w");
-				catch (ErrnoException e)
-					myEnforce(false, "failed to open output file: "~e.msg);
+			rv = runCppNoSed();
 
-				// start sed
-
-				Pipe sedInput = pipe();
-				Pid sed = spawnProcess(
-					["sed", cppSedScript],
-					/* stdin  */ sedInput.readEnd,
-					/* stdout */ output
-				);
-
-				// preprocess file and pass the output to sed
-
-				int rv;
-				bool error;
-
-				if (V)
-					printCommand("cpp"~cppArgs~file);
-
-				rv = spawnProcess(
-					"cpp"~cppArgs~file,
-					/* stdin  */ stdin,
-					/* stdout */ sedInput.writeEnd,
-					/* stderr */ stderr,
-					/* cwd    */ null,
-					/* flags  */ Config.retainStdout // closed manually
-				).wait();
-				if (rv)
-				{
-					error = true;
-					xoutput.writefln("importcc: cpp exited with status %s", rv);
-				}
-
-				// add junk
-
-				version(useBuiltinsModule)
-					sedInput.writeEnd.writeln("__import __importcc;");
-
-				// close the pipe and wait for sed to finish
-
-				sedInput.writeEnd.close();
-
-				rv = sed.wait();
-				if (rv)
-				{
-					error = true;
-					xoutput.writefln("importcc: sed exited with status %s", rv);
-				}
-
-				if (error)
-					return 1;
-			}
-		}
+		if (rv)
+			return rv;
 	}
 
 	// if preprocessing only, our work is done
@@ -748,6 +628,207 @@ int cliMain(string[] args)
 
 		default:
 			assert(0);
+	}
+
+	return 0;
+}
+
+int runCppNoSed()
+{
+	if (compilerMode == Mode.preprocessOnly)
+	// with -E, all output goes in a single file (stdout or set by -o)
+	{
+		File output = stdout;
+		if (outFile)
+		{
+			try
+				output = File(outFile, "w");
+			catch (ErrnoException e)
+				myEnforce(false, "failed to open output file: "~e.msg);
+		}
+
+		foreach (file, _; cppFiles)
+		{
+			if (V)
+				printCommand("cpp"~cppArgs~file);
+
+			int rv = spawnProcess(
+				"cpp"~cppArgs~file,
+				/* stdin  */ stdin,
+				/* stdout */ output,
+				/* stderr */ stderr,
+				/* cwd    */ null,
+				/* flags  */ Config.retainStdout // closed manually
+			).wait();
+
+			if (rv)
+			{
+				xoutput.writefln("importcc: cpp exited with status %s", rv);
+				return 1;
+			}
+		}
+	}
+	else
+	// no -E, preprocess individual files to be used in compilation
+	{
+		foreach (file, cppOutFile; cppFiles)
+		{
+			File output;
+			try
+				output = File(cppOutFile, "w");
+			catch (ErrnoException e)
+				myEnforce(false, "failed to open output file: "~e.msg);
+
+			if (V)
+				printCommand("cpp"~cppArgs~file);
+
+			int rv = spawnProcess(
+				"cpp"~cppArgs~file,
+				/* stdin  */ stdin,
+				/* stdout */ output,
+				/* stderr */ stderr,
+				/* cwd    */ null,
+				/* flags  */ Config.retainStdout // closed manually
+			).wait();
+			if (rv)
+			{
+				xoutput.writefln("importcc: cpp exited with status %s", rv);
+				return 1;
+			}
+
+			version(useBuiltinsModule)
+				output.writeln("__import __importcc;");
+		}
+	}
+
+	return 0;
+}
+
+int runCppWithSed()
+{
+	if (compilerMode == Mode.preprocessOnly)
+	// with -E, all output goes in a single file (stdout or set by -o)
+	{
+		File output = stdout;
+		if (outFile)
+		{
+			try
+				output = File(outFile, "w");
+			catch (ErrnoException e)
+				myEnforce(false, "failed to open output file: "~e.msg);
+		}
+
+		// start sed
+
+		if (V)
+			printCommand(["sed", cppSedScript]);
+
+		Pipe sedInput = pipe();
+		Pid sed = spawnProcess(
+			["sed", cppSedScript],
+			sedInput.readEnd,
+			output
+		);
+
+		// preprocess each file and feed the output to sed
+
+		bool error;
+
+		foreach (file, _; cppFiles)
+		{
+			if (V)
+				printCommand("cpp"~cppArgs~file);
+
+			int rv = spawnProcess(
+				"cpp"~cppArgs~file,
+				/* stdin  */ stdin,
+				/* stdout */ sedInput.writeEnd,
+				/* stderr */ stderr,
+				/* cwd    */ null,
+				/* flags  */ Config.retainStdout // closed manually
+			).wait();
+
+			if (rv)
+			{
+				error = true;
+				xoutput.writefln("importcc: cpp exited with status %s", rv);
+				break;
+			}
+		}
+
+		// close pipe and wait for sed to finish
+
+		sedInput.close();
+		if (int rv = sed.wait())
+		{
+			error = true;
+			xoutput.writefln("importcc: sed exited with status %s", rv);
+		}
+
+		if (error)
+			return 1;
+	}
+	else
+	// no -E, preprocess individual files to be used in compilation
+	{
+		foreach (file, cppOutFile; cppFiles)
+		{
+			File output;
+			try
+				output = File(cppOutFile, "w");
+			catch (ErrnoException e)
+				myEnforce(false, "failed to open output file: "~e.msg);
+
+			// start sed
+
+			Pipe sedInput = pipe();
+			Pid sed = spawnProcess(
+				["sed", cppSedScript],
+				/* stdin  */ sedInput.readEnd,
+				/* stdout */ output
+			);
+
+			// preprocess file and pass the output to sed
+
+			int rv;
+			bool error;
+
+			if (V)
+				printCommand("cpp"~cppArgs~file);
+
+			rv = spawnProcess(
+				"cpp"~cppArgs~file,
+				/* stdin  */ stdin,
+				/* stdout */ sedInput.writeEnd,
+				/* stderr */ stderr,
+				/* cwd    */ null,
+				/* flags  */ Config.retainStdout // closed manually
+			).wait();
+			if (rv)
+			{
+				error = true;
+				xoutput.writefln("importcc: cpp exited with status %s", rv);
+			}
+
+			// add junk
+
+			version(useBuiltinsModule)
+				sedInput.writeEnd.writeln("__import __importcc;");
+
+			// close the pipe and wait for sed to finish
+
+			sedInput.writeEnd.close();
+
+			rv = sed.wait();
+			if (rv)
+			{
+				error = true;
+				xoutput.writefln("importcc: sed exited with status %s", rv);
+			}
+
+			if (error)
+				return 1;
+		}
 	}
 
 	return 0;

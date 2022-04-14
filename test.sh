@@ -87,9 +87,10 @@ mustcompile ../tests/xbps-glob.c
 mustcompile ../tests/xbps-scandir.c '-D_XOPEN_SOURCE=700' '-D_FILE_OFFSET_BITS=64' -std=c99 -pthread
 
 mustcompile ../tests/includes.c
-#mustcompile ../tests/includes.c -D_GNU_SOURCE # importcc default
+mustcompile ../tests/includes.c -D_GNU_SOURCE
 mustcompile ../tests/includes.c -std=c99
 mustcompile ../tests/includes.c -D_FILE_OFFSET_BITS=64
+mustrun     ../tests/gnu_source.c
 
 mustrun     ../tests/alloca.c
 mustrun     ../tests/fileio.c
