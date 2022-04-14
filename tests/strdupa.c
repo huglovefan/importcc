@@ -6,6 +6,8 @@
 #endif
 
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 int main()
 {
@@ -14,14 +16,24 @@ int main()
 	assert(dup != s);
 	assert(!strcmp(dup, s));
 
-	// bug: the argument is evaluated twice
+	// the argument is evaluated once
 	int i = 0;
 	strdupa( (i++, "test") );
-#if defined(__GNUC__)
 	assert(i == 1);
-#else
-	assert(i == 2);
-#endif
+
+#define NO 50
+	char *ps[NO];
+	for (int i = 0; i < NO; i++)
+	{
+		char buf[16];
+		snprintf(buf, sizeof(buf), "%d", i);
+		ps[i] = strdupa(buf);
+	}
+	for (int i = 0; i < NO; i++)
+	{
+		int no = atoi(ps[i]);
+		assert(no == i);
+	}
 
 	return 0;
 }

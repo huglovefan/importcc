@@ -130,8 +130,8 @@ string[] cppArgs = [
 	"-D__FUNCTION__=__builtin_FUNCTION",
 	"-D__PRETTY_FUNCTION__=__builtin_PRETTY_FUNCTION",
 
-	// bug: this evaluates the argument twice
-	"-Dstrdupa(x)=__builtin_strdupa((x),__builtin_alloca(__builtin_strlen((x))+1))",
+	// bug: not signal-safe
+	"-Dstrdupa(x)=__builtin_strdupa_finish(__builtin_alloca(__builtin_strdupa_prepare((x))))",
 
 	//
 	// glibc

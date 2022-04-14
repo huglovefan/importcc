@@ -16,14 +16,27 @@ if (__traits(isFloating, T))
 // -----------------------------------------------------------------------------
 
 // builtin to support implementing strdupa() using a macro
-// this is called like __builtin_strdupa(s, alloca(strlen(s)+1))
+// this is called like __builtin_strdupa_finish(alloca(__builtin_strdupa_prepare(x)))
 
-char* __builtin_strdupa()(const(char)* s, void* storage)
+template __strdupa_tpl()
 {
-	size_t sz = __builtin_strlen(s)+1;
-	__builtin_memcpy(storage, s, sz);
-	return cast(char*)storage;
+	const(char)[] str; // thread-local
+
+	size_t prepare()(const(char)* s)
+	{
+		return (str = s[0..__builtin_strlen(s)+1]).length;
+	}
+
+	char* finish()(void* p)
+	{
+		auto s = str;
+		__builtin_memcpy(p, s.ptr, s.length);
+		return cast(char*)p;
+	}
 }
+
+alias __builtin_strdupa_prepare() = __strdupa_tpl!().prepare;
+alias __builtin_strdupa_finish() = __strdupa_tpl!().finish;
 
 // -----------------------------------------------------------------------------
 
