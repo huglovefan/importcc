@@ -18,9 +18,54 @@ if (__traits(isFloating, T))
 // builtin to support implementing strdupa() using a macro
 // this is called like __builtin_strdupa_finish(alloca(__builtin_strdupa_prepare(x)))
 
+// https://www.gnu.org/software/libc/manual/html_node/Copying-Strings-and-Arrays.html#index-strdupa
+
+version(Posix) version(X86_64) version = posix_x86_64;
+
+version(posix_x86_64)
 template __strdupa_tpl()
 {
-	const(char)[] str; // thread-local
+	// use XMM registers to smuggle the string and size between calls
+	// the only code that runs in between is alloca() which doesn't use them
+
+	import core.stdc.string : strlen, memcpy;
+
+	size_t prepare()(const(char)*)
+	{
+		asm nothrow @nogc
+		{
+			naked;
+			push	RDI;
+			call	strlen;
+			inc		RAX;
+			movq	XMM0,[RSP]; // string
+			movq	XMM1,RAX; // length+1
+			pop		RDI;
+			ret;
+		}
+	}
+
+	char* finish()(void*)
+	{
+		asm nothrow @nogc
+		{
+			naked;
+			push	RDI;
+			movq	RSI,XMM0;
+			movq	RDX,XMM1;
+			call	memcpy;
+			pop		RAX;
+			ret;
+		}
+	}
+}
+else
+template __strdupa_tpl()
+{
+	// use a thread-local variable to hold the string between calls
+	// this implementation isn't async-signal-safe (see POSIX Safety Concepts in glibc documentation)
+
+	const(char)[] str;
 
 	size_t prepare()(const(char)* s)
 	{
