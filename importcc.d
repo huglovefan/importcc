@@ -896,7 +896,8 @@ void doCommandLineArg(string[] args, out size_t used)
 			compilerMode = Mode.preprocessOnly;
 			return;
 		case "-g":
-			dmdArgs ~= getOption();
+		case "-ggdb":
+			dmdArgs ~= "-g";
 			return;
 		case "-I":
 			cppArgs ~= getOptionAndValue();
@@ -908,6 +909,7 @@ void doCommandLineArg(string[] args, out size_t used)
 			doOptimize = false;
 			return;
 		case "-O":
+		case "-Os":
 		case "-O1":
 		case "-O2":
 		case "-O3":
@@ -961,6 +963,7 @@ void doCommandLineArg(string[] args, out size_t used)
 			dmdArgs ~= getOption();
 			exeType = ExeType.sharedLib;
 			return;
+		case "-ansi":
 		case "-std=c89":
 		case "-std=c99":
 		case "-std=c11":
@@ -969,10 +972,22 @@ void doCommandLineArg(string[] args, out size_t used)
 		case "-std=gnu11":
 			cppArgs ~= getOption();
 			return;
+		case "-pedantic":
 		case "-W":
 		case "-Wall":
+		case "-Wcast-align":
+		case "-Wcast-qual":
+		case "-Wdeclaration-after-statement":
 		case "-Wextra":
+		case "-Wfloat-equal":
+		case "-Wmissing-prototypes":
 		case "-Wpedantic":
+		case "-Wshadow":
+		case "-Wsign-conversion":
+		case "-Wsuggest-attribute=noreturn":
+		case "-Wunreachable-code":
+		case "-Wunused-function":
+		case "-Wunused-result":
 			dmdArgs.filterAll("-d");
 			dmdArgs.filterAll("-w");
 			dmdArgs.appendUnique("-wi");
@@ -995,15 +1010,26 @@ void doCommandLineArg(string[] args, out size_t used)
 			return;
 
 		//
+		// ignored gcc flags
+		//
+
+		case "-fmax-errors=3": // dmd -verrors=3
+		case "-fno-omit-frame-pointer": // dmd -gs
+		case "-fno-stack-protector":
+		case "-fno-strict-aliasing":
+		case "-fomit-frame-pointer":
+		case "-fstrict-aliasing":
+			return;
+
+		//
 		// cpp flags also accepted by gcc
 		//
 
-		case "-A":
-			cppArgs ~= getOptionAndValue();
-			return;
+		case "-dM": // output defined macros (-E only)
 		case "-P":
 			cppArgs ~= getOption();
 			return;
+		case "-A":
 		case "-include":
 			cppArgs ~= getOptionAndValue();
 			return;
