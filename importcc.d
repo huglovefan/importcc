@@ -1277,6 +1277,14 @@ void checkUnsupportedFunction(string[] objs)
 				continue thisLineLoop;
 			}
 
+			// remove linked symbol version (like "_setjmp@GLIBC_2.2.5")
+			if (compilerMode == Mode.compileAndLink)
+			{
+				size_t atpos = part.indexOf('@');
+				if (atpos != -1)
+					part = part[0..atpos];
+			}
+
 			// nm -D /lib/x86_64-linux-gnu/libc.so.6 | awk '$3~/jmp/&&$3!~/PRIVATE/{print$3}' | grep -o '^[^@]*'
 			switch (part)
 			{

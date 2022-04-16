@@ -96,7 +96,7 @@ mustcompile /usr/include/stdlib.h
 	echo 'int x;' > b.c
 	importcc -c a.c
 	importcc a.o b.c -shared ## compiles b.c to a.o after the out file name
-) || { g_rv=1; echo error; }
+); [ $? -eq 0 ] || { g_rv=1; echo error 1; }
 
 # test that linking with versioned shared objects works
 ( set -e
@@ -109,13 +109,13 @@ mustcompile /usr/include/stdlib.h
 	## no versionless one
 	rm a.so
 	importcc main.c a.so.1
-) || { g_rv=1; echo error; }
+); [ $? -eq 0 ] || { g_rv=1; echo error 2; }
 
 ## test that preprocessing an unknown file extension works with "-x c"
 ( set -e
 	echo '#include <stdio.h>' >abc.def
 	importcc -E -x c abc.def | grep printf >/dev/null || exit
-) || { g_rv=1; echo error; }
+); [ $? -eq 0 ] || { g_rv=1; echo error 3; }
 
 ## test setjmp() limitation
 ## - the test snippet gives a different result with -O vs. without
@@ -140,7 +140,7 @@ mustcompile /usr/include/stdlib.h
 	# setjmp.c, optimizations ON -> 0
 	out=$(importcc -O2 -run ../tests/setjmp.c 2>/dev/null)
 	[ "$out" = 0 ]
-) || { g_rv=1; echo error; }
+); [ $? -eq 0 ] || { g_rv=1; echo error 4; }
 
 ## test that linking doesn't depend on $CC or cc executable
 ( set -e
@@ -150,10 +150,11 @@ mustcompile /usr/include/stdlib.h
 	# cc executable
 	mkdir -p tmpbin
 	echo 'echo fail; false' >tmpbin/cc
+	chmod +x tmpbin/cc
 	PATH=$PWD/tmpbin:$PATH
 	[ "$(cc 2>&1)" = fail ] # check that it's used
 	importcc -run ../tests/true.c
-) || { g_rv=1; echo error; }
+); [ $? -eq 0 ] || { g_rv=1; echo error 5; }
 
 ## test that compiling an executable doesn't leave an object file behind
 ( set -e
@@ -164,16 +165,16 @@ mustcompile /usr/include/stdlib.h
 	mkdir src
 	cp ../../tests/true.c src/
 
-	importcc                src/true.c && [ -z "$(find -name '*.o')" ]
-	importcc           -run src/true.c && [ -z "$(find -name '*.o')" ]
-	importcc -o hi          src/true.c && [ -z "$(find -name '*.o')" ]
-	importcc -o hi     -run src/true.c && [ -z "$(find -name '*.o')" ]
-	importcc -o src/hi      src/true.c && [ -z "$(find -name '*.o')" ]
-	importcc -o src/hi -run src/true.c && [ -z "$(find -name '*.o')" ]
+	importcc                src/true.c && [ -z "$(find -name '*.o')" ] || exit
+	importcc           -run src/true.c && [ -z "$(find -name '*.o')" ] || exit
+	importcc -o hi          src/true.c && [ -z "$(find -name '*.o')" ] || exit
+	importcc -o hi     -run src/true.c && [ -z "$(find -name '*.o')" ] || exit
+	importcc -o src/hi      src/true.c && [ -z "$(find -name '*.o')" ] || exit
+	importcc -o src/hi -run src/true.c && [ -z "$(find -name '*.o')" ] || exit
 
 	cd ..
 	rm -rf xtmp
-) || { g_rv=1; echo error; }
+); [ $? -eq 0 ] || { g_rv=1; echo error 6; }
 
 if [ $g_rv -eq 0 ]
 then
