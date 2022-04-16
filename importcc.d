@@ -1188,6 +1188,11 @@ void addInputFileArg(string path)
 			dmdLinkerFileCount++;
 			break;
 
+		// need gcc for this
+		case ".S":
+		case ".s":
+			throw new UseAltCompiler(path);
+
 		default:
 			// .so with version number
 			// pass this using -L= because dmd can't detect it by the extension
