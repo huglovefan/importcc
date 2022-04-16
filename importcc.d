@@ -511,6 +511,21 @@ int cliMain(string[] args)
 				xoutput.writefln("importcc: working directory: %s", getcwd());
 			}
 
+			// if using -run, make sure to delete the executable's object file
+			//  on failure since they're randomly named and might pile up
+			// note: check tmpOutFile (set if object file will be created) but
+			//  delete outFile since it's the one passed as -of= at this point
+			if (doRun && tmpOutFile)
+			{
+				try
+				{
+					string exeObjectFile = outFile.setExtension(".o");
+					std.file.remove(exeObjectFile);
+				}
+				catch (Exception)
+					{}
+			}
+
 			// if one of the input files is in IMPCC_MAYSKIP, re-run the
 			//  command line with gcc
 			string tryGcc;

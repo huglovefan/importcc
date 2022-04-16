@@ -172,6 +172,13 @@ mustcompile /usr/include/stdlib.h
 	importcc -o src/hi      src/true.c && [ -z "$(find -name '*.o')" ] || exit
 	importcc -o src/hi -run src/true.c && [ -z "$(find -name '*.o')" ] || exit
 
+	## link error due to missing main()
+	## the object file is deleted with -run since it's randomly named
+	touch src/empty.c
+	importcc           -run src/empty.c 2>/dev/null || true; [ -z "$(find -name '*.o')" ]
+	importcc -o hi     -run src/empty.c 2>/dev/null || true; [ -z "$(find -name '*.o')" ]
+	importcc -o src/hi -run src/empty.c 2>/dev/null || true; [ -z "$(find -name '*.o')" ]
+
 	cd ..
 	rm -rf xtmp
 ); [ $? -eq 0 ] || { g_rv=1; echo error 6; }
