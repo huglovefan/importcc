@@ -397,13 +397,21 @@ int cliMain(string[] args)
 	if (Vself)
 		printCommand(args);
 
+	bool argerror;
 	while (args.length > 1)
 	{
 		size_t used;
 		doCommandLineArg(args[1..$], used);
-		assert(used);
+		if (!used)
+		{
+			argerror = true;
+			xoutput.writefln("importcc: unknown option '%s'", args[1]);
+			used = 1;
+		}
 		args = args[used..$];
 	}
+	if (argerror)
+		return 1;
 
 	//
 	// preprocess sources
@@ -1108,7 +1116,8 @@ next:
 	// unsupported option
 	if (getOption().startsWith('-'))
 	{
-		myEnforce(false, "unknown option "~getOption());
+		used = 0;
+		return;
 	}
 
 	// input file
