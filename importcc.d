@@ -1242,9 +1242,10 @@ string suitableInputFile(string path)
 	switch (base)
 	{
 		case "__builtins":
-		case "__extra":        // importcc
-		case "__gccbuiltins":  // importcc
-		case "__importcc":     // importcc
+		case "__clangbuiltins": // importcc
+		case "__extra":         // importcc
+		case "__gccbuiltins":   // importcc
+		case "__importcc":      // importcc
 		case "core":
 		case "etc":
 		case "object":

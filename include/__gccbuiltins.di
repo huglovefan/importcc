@@ -177,6 +177,7 @@ alias __builtin_umulll_overflow() = __builtin_mul_overflow!ulong;
 
 alias __builtin_alloca() = imported!"core.stdc.stdlib".alloca;
 
+alias __builtin_abort() = imported!"core.stdc.stdlib".abort;
 alias __builtin_memcpy() = imported!"core.stdc.string".memcpy;
 alias __builtin_strlen() = imported!"core.stdc.string".strlen;
 
@@ -206,4 +207,18 @@ const(char)* __builtin_FUNCTION(string func = __FUNCTION__)()
 	}();
 
 	return x.ptr;
+}
+
+int __builtin_clz()(uint x)
+{
+	import core.bitop;
+
+	return bsr(x)^31;
+}
+
+int __builtin_ctz()(uint x)
+{
+	import core.bitop;
+
+	return bsf(x);
 }

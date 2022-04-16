@@ -133,3 +133,4 @@ ulong __uint64_identity()(ulong x)
 
 public import __extra;
 public import __gccbuiltins;
+public import __clangbuiltins;
