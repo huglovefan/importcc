@@ -4,6 +4,7 @@ import core.stdc.stdlib : abort, exit;
 import core.sys.posix.stdlib : unsetenv;
 import core.sys.posix.unistd : getpid, getppid, isatty;
 import core.time;
+import etc.c.zlib : crc32_z;
 import std.algorithm;
 import std.array;
 import std.conv;
@@ -32,6 +33,7 @@ DMD=...							override path to dmd executable
 
 IMPCC_FAILCMD=1					print command line on failure
 IMPCC_FAILSRC=1					print source code on failure
+IMPCC_DUMPDIR=/path				collect preprocessed sources to directory
 
 +/
 
@@ -439,6 +441,25 @@ int cliMain(string[] args)
 	}
 
 	myEnforce(dmdFileCount, "no input files given");
+
+	// at this point: inputs have been preprocessed and we're going to run dmd later
+	// copy the preprocessed sources to IMPCC_DUMPDIR=
+	foreach (arg; dmdArgs)
+	{
+		switch (arg.extension)
+		{
+			case ".c":
+				if (!preprocessed) // only with -fpreprocessed
+					continue;
+				saveDumpFile(arg);
+				break;
+			case ".i":
+				saveDumpFile(arg);
+				break;
+			default:
+				break;
+		}
+	}
 
 	//
 	// add some flags based on variables
@@ -1364,6 +1385,45 @@ void checkUnsupportedFunction(string[] objs)
 	}
 
 	proc.pid.wait();
+}
+
+void saveDumpFile(string path)
+{
+	string dir = environment.get("IMPCC_DUMPDIR");
+	if (!dir)
+		return;
+
+	// open out file, ignore error
+	File f;
+	try
+		f = File(path);
+	catch (Exception)
+		return;
+
+	// get crc of contents to use as filename
+	uint crc;
+	foreach (buf; f.byChunk(0xffff))
+		crc = crc32_z(crc, buf.ptr, buf.length);
+
+	string dumpName = format("dump%08x.i", crc);
+	auto dumpPath = chainPath(dir, dumpName);
+
+	// exit if we've already copied the same file
+	if (dumpPath.exists)
+		return;
+
+again:
+	try
+		std.file.copy(path, dumpPath);
+	catch (Exception e)
+	{
+		if (!dir.exists)
+		{
+			dir.mkdirRecurse();
+			goto again;
+		}
+		throw e;
+	}
 }
 
 int runCommand(const string[] args, string[string] env = null)
