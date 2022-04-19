@@ -37,6 +37,18 @@ IMPCC_DUMPDIR=/path				collect preprocessed sources to directory
 
 +/
 
+static immutable envvars = [
+	"IMPCC_MAYSKIP",
+	"IMPCC_OPTNONE",
+	"IMPCC_SKIP",
+	"IMPCC_STDERR",
+	"IMPCC_TTYMSG",
+
+	"IMPCC_FAILCMD",
+	"IMPCC_FAILSRC",
+	"IMPCC_DUMPDIR",
+];
+
 __gshared:
 
 version = useBuiltinsModule; /// auto-import "import/__importc.di" in preprocessed C sources
@@ -407,6 +419,13 @@ int cliMain(string[] args)
 
 	if (Vself)
 		printCommand(args);
+
+	// warn for mistyped enviornment vairables
+	foreach (k; environment.toAA.byKey)
+	{
+		if ((k.startsWith("IMPCC_") || k.startsWith("IMPC_")) && !envvars.canFind(k))
+			xoutput.writefln("importcc warning: unknown environment variable '%s'", k);
+	}
 
 	bool argerror;
 	while (args.length > 1)
