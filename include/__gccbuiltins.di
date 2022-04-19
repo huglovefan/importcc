@@ -4,6 +4,46 @@ nothrow @nogc:
 
 // -----------------------------------------------------------------------------
 
+// 6.54 Legacy __sync Built-in Functions for Atomic Memory Access
+
+// https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html
+
+// not implemented: pointer argument must not scale by type size
+
+type __sync_fetch_and_add(type, T...)(type* ptr, type value, T)
+if (__traits(isIntegral, type) /*|| is(immutable type : immutable void*)*/)
+{
+	// returns old value
+	import core.atomic;
+	return atomicFetchAdd(*ptr, value);
+}
+
+type __sync_fetch_and_sub(type, T...)(type* ptr, type value, T)
+if (__traits(isIntegral, type) /*|| is(immutable type : immutable void*)*/)
+{
+	// returns old value
+	import core.atomic;
+	return atomicFetchSub(*ptr, value);
+}
+
+type __sync_add_and_fetch(type, T...)(type* ptr, type value, T)
+if (__traits(isIntegral, type) /*|| is(immutable type : immutable void*)*/)
+{
+	// returns new value
+	import core.atomic;
+	return atomicFetchAdd(*ptr, value)+value;
+}
+
+type __sync_sub_and_fetch(type, T...)(type* ptr, type value, T)
+if (__traits(isIntegral, type) /*|| is(immutable type : immutable void*)*/)
+{
+	// returns new value
+	import core.atomic;
+	return atomicFetchSub(*ptr, value)-value;
+}
+
+// -----------------------------------------------------------------------------
+
 // 6.55 Built-in Functions for Memory Model Aware Atomic Operations
 
 // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html

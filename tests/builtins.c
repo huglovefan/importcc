@@ -62,8 +62,39 @@ int unused1()
 	return 0;
 }
 
+void sync()
+{
+	int x;
+
+	x = 0;
+	assert(__sync_fetch_and_add(&x, 2) == 0);
+	assert(x == 2);
+
+	x = 0;
+	assert(__sync_fetch_and_sub(&x, 2) == 0);
+	assert(x == -2);
+
+	x = 0;
+	assert(__sync_add_and_fetch(&x, 2) == 2);
+	assert(x == 2);
+
+	x = 0;
+	assert(__sync_sub_and_fetch(&x, 2) == -2);
+	assert(x == -2);
+}
+// xbps configure snippet
+void unused2()
+{
+	volatile unsigned long val = 1;
+	__sync_fetch_and_add(&val, 1);
+	__sync_fetch_and_sub(&val, 1);
+	__sync_add_and_fetch(&val, 1);
+	__sync_sub_and_fetch(&val, 1);
+}
+
 int main()
 {
 	atomics();
+	sync();
 	return 0;
 }
