@@ -107,6 +107,15 @@ string[] cppArgs = [
 	"-D__STDC_NO_ATOMICS__",
 	"-D__STDC_NO_VLA__",
 
+	// gcc predefined macros that don't apply to importcc
+	// list: cpp -dM /dev/null | sort
+	"-U__GCC_HAVE_DWARF2_CFI_ASM",
+	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1",
+	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2",
+	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4",
+	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8",
+	"-U__HAVE_SPECULATION_SAFE_VALUE",
+
 	//
 	// builtins
 	//
