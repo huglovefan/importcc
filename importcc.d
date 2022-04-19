@@ -1402,10 +1402,10 @@ void saveDumpFile(string path)
 	if (!dir)
 		return;
 
-	// open out file, ignore error
+	// open input file, return if nonexistent
 	File f;
 	try
-		f = File(path);
+		f = File(path, "r");
 	catch (Exception)
 		return;
 
