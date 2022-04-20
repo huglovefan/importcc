@@ -158,6 +158,7 @@ string[] cppArgs = [
 	"-Dstrdupa(x)=__builtin_strdupa_finish(__builtin_alloca(__builtin_strdupa_prepare((x))))",
 
 	// gcc builtin
+	// bug: this relies on a bug to work, the char array is meant to turn to char* but doesn't in importC
 	"-D__builtin_choose_expr(const_exp,exp1,exp2)=_Generic((char[1+!(const_exp)]){0},char[1]:(exp1),char[2]:(exp2))",
 
 	//
