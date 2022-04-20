@@ -81,6 +81,30 @@ void sync()
 	x = 0;
 	assert(__sync_sub_and_fetch(&x, 2) == -2);
 	assert(x == -2);
+
+	x = 1;
+	assert(__sync_bool_compare_and_swap(&x, 1, 2)); // compare success
+	assert(x == 2);
+	assert(!__sync_bool_compare_and_swap(&x, 98, 99)); // compare failure
+	assert(x == 2);
+
+	x = 1;
+	assert(__sync_val_compare_and_swap(&x, 1, 2) == 1); // compare success
+	assert(x == 2);
+	assert(__sync_val_compare_and_swap(&x, 98, 99) == 2); // compare failure
+	assert(x == 2);
+
+	__sync_synchronize();
+
+	x = 1;
+	assert(__sync_lock_test_and_set(&x, 22) == 1);
+	assert(x == 22);
+	assert(__sync_lock_test_and_set(&x, 333) == 22);
+	assert(x == 333);
+
+	x = 99;
+	__sync_lock_release(&x);
+	assert(x == 0);
 }
 // xbps configure snippet
 void unused2()
@@ -88,6 +112,14 @@ void unused2()
 	volatile unsigned long val = 1;
 	__sync_fetch_and_add(&val, 1);
 	__sync_fetch_and_sub(&val, 1);
+	__sync_add_and_fetch(&val, 1);
+	__sync_sub_and_fetch(&val, 1);
+}
+// libjansson configure snippet
+void unused3()
+{
+	unsigned long val;
+	__sync_bool_compare_and_swap(&val, 0, 1);
 	__sync_add_and_fetch(&val, 1);
 	__sync_sub_and_fetch(&val, 1);
 }
