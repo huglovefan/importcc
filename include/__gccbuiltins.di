@@ -1,13 +1,16 @@
 module __gccbuiltins;
 
-alias Atomic     = imported!"core.atomic";
-alias BitOp      = imported!"core.bitop";
-alias CheckedInt = imported!"core.checkedint";
+private
+{
+	alias Atomic     = imported!"core.atomic";
+	alias BitOp      = imported!"core.bitop";
+	alias CheckedInt = imported!"core.checkedint";
 
-alias c_long = imported!"core.stdc.config".c_long;
-alias c_ulong = imported!"core.stdc.config".c_ulong;
+	alias c_long = imported!"core.stdc.config".c_long;
+	alias c_ulong = imported!"core.stdc.config".c_ulong;
 
-alias MemoryOrder = imported!"core.atomic".MemoryOrder;
+	alias MemoryOrder = imported!"core.atomic".MemoryOrder;
+}
 
 nothrow @nogc:
 
