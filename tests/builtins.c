@@ -124,9 +124,36 @@ void unused3()
 	__sync_sub_and_fetch(&val, 1);
 }
 
+void builtin_choose()
+{
+	int a,b;
+
+	// test with lvalue
+	a = b = 0;
+	__builtin_choose_expr(1, a, b) = 1;
+	assert(a == 1 && b == 0);
+	a = b = 0;
+	__builtin_choose_expr(0, a, b) = 1;
+	assert(a == 0 && b == 1);
+
+	// test return type
+	char c;
+	assert( sizeof(__builtin_choose_expr(1, c, a) == sizeof(char)) );
+	assert( sizeof(__builtin_choose_expr(0, c, a) == sizeof(int)) );
+
+	// test that the losing one isn't evaluated
+	a = b = 0;
+	__builtin_choose_expr(1, a++, b++);
+	assert(a == 1 && b == 0);
+	a = b = 0;
+	__builtin_choose_expr(0, a++, b++);
+	assert(a == 0 && b == 1);
+}
+
 int main()
 {
 	atomics();
 	sync();
+	builtin_choose();
 	return 0;
 }
