@@ -7,13 +7,11 @@ nothrow @nogc:
 
 // -----------------------------------------------------------------------------
 
-// __builtin_printf: debug printf to terminal
-
-// bug: name collides with gcc __builtin_printf()
+// __builtin_dbg_printf: debug printf to terminal
 
 extern(C)
 pragma(printf)
-void __builtin_printf()(const(char)* fmt, ...)
+void __builtin_dbg_printf()(const(char)* fmt, ...)
 {
 	import core.stdc.stdarg;
 	import core.stdc.stdio;
