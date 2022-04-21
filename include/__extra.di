@@ -1,5 +1,8 @@
 module __extra;
 
+// https://issues.dlang.org/show_bug.cgi?id=22767
+version(X86_64) alias __va_list_tag = imported!"core.internal.vararg.sysv_x64".__va_list_tag;
+
 nothrow @nogc:
 
 // -----------------------------------------------------------------------------
@@ -8,16 +11,9 @@ nothrow @nogc:
 
 // bug: name collides with gcc __builtin_printf()
 
-template __builtin_printf()
-{
-
-// https://issues.dlang.org/show_bug.cgi?id=22767
-// has to be outside the function
-version(X86_64) import core.internal.vararg.sysv_x64 : __va_list_tag;
-
 extern(C)
 pragma(printf)
-void __builtin_printf(const(char)* fmt, ...)
+void __builtin_printf()(const(char)* fmt, ...)
 {
 	import core.stdc.stdarg;
 	import core.stdc.stdio;
@@ -37,8 +33,6 @@ void __builtin_printf(const(char)* fmt, ...)
 
 	if (f != stderr)
 		fclose(f);
-}
-
 }
 
 // -----------------------------------------------------------------------------
