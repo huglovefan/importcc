@@ -1093,6 +1093,8 @@ void doCommandLineArg(string[] args, out size_t used)
 
 		//
 		// linker flags
+		// fix me: build systems using libtool insist on calling us with linker flags (why?)
+		// example: libjansson, libpng
 		//
 
 		case "--default-symver":
@@ -1179,6 +1181,17 @@ next:
 	if (getOption().startsWith("-Wno-")) // silence specific warning
 	{
 		return; // ignore
+	}
+
+	//
+	// linker flags
+	// see comment in the switch
+	//
+
+	if (getOption().startsWith("--version-script="))
+	{
+		dmdArgs ~= "-L="~getOption();
+		return;
 	}
 
 	//
