@@ -1070,7 +1070,6 @@ void doCommandLineArg(string[] args, out size_t used)
 		// ignored gcc flags
 		//
 
-		case "-fmax-errors=3": // dmd -verrors=3
 		case "-fno-omit-frame-pointer": // dmd -gs
 		case "-fno-stack-protector":
 		case "-fno-strict-aliasing":
@@ -1163,6 +1162,16 @@ next:
 	{
 		// https://gcc.gnu.org/onlinedocs/cpp/Obsolete-Features.html#Assertions
 		cppArgs ~= getOption();
+		return;
+	}
+	if (getOption().startsWith("-ferror-limit="))
+	{
+		dmdArgs ~= "-verrors="~getOption()["-ferror-limit=".length..$];
+		return;
+	}
+	if (getOption().startsWith("-fmax-errors="))
+	{
+		dmdArgs ~= "-verrors="~getOption()["-fmax-errors=".length..$];
 		return;
 	}
 	if (getOption().startsWith("-fuse-ld=")) // specify linker to use
