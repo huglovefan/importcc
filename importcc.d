@@ -1085,7 +1085,6 @@ void doCommandLineArg(string[] args, out size_t used)
 		case "-P":
 			cppArgs ~= getOption();
 			return;
-		case "-A":
 		case "-include":
 			cppArgs ~= getOptionAndValue();
 			return;
@@ -1158,12 +1157,6 @@ next:
 	// gcc
 	//
 
-	if (getOption().startsWith("-A")) // preprocessor assertion
-	{
-		// https://gcc.gnu.org/onlinedocs/cpp/Obsolete-Features.html#Assertions
-		cppArgs ~= getOption();
-		return;
-	}
 	if (getOption().startsWith("-ferror-limit="))
 	{
 		dmdArgs ~= "-verrors="~getOption()["-ferror-limit=".length..$];
