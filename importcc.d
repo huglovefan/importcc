@@ -526,8 +526,11 @@ int cliMain(string[] args)
 		dmdArgs ~= ["-O", "-inline"];
 
 		// https://gcc.gnu.org/onlinedocs/gcc-10.2.0/cpp/Common-Predefined-Macros.html#:~:text=__OPTIMIZE__
-		// prepend so it can be overridden
-		cppArgs = ["-D__OPTIMIZE__"]~cppArgs;
+		// prepend so they can be overridden
+		cppArgs = [
+			"-D__OPTIMIZE__",
+			"-U__NO_INLINE__",
+		]~cppArgs;
 	}
 
 	string defaultOutFileName()
