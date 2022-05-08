@@ -217,6 +217,13 @@ string[] dmdArgs = [
 	"-Xcc=-lphobos2",
 ];
 
+// extra args to pass to DefaultCompiler when using it to compile files as a fallback
+string[] defaultCompilerArgs = [
+	// default to -fPIC to match dmd
+	// build systems don't explicitly pass this if it's the default with dmd
+	"-fPIC",
+];
+
 /// sed script to apply fixes after preprocessing
 static immutable string cppSedScript = "";
 
@@ -622,7 +629,7 @@ int cliMain(string[] args)
 			if (tryGcc)
 			{
 				xoutput.writefln("importcc: will use %s to compile %s", DefaultCompiler, tryGcc);
-				int gccRv = runCommand(DefaultCompiler~origArgs[1..$]);
+				int gccRv = runCommand(DefaultCompiler~defaultCompilerArgs~origArgs[1..$]);
 				if (gccRv == 0)
 				{
 					// clean up temporary files on success
