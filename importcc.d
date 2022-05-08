@@ -102,25 +102,32 @@ string[] junkFiles;
 
 string[] cppArgs = [
 	//
-	// cpp
+	// cpp flags
 	//
 
 	"-w", // no warnings
 
 	//
-	// language features
+	// C dialect
 	//
 
 	// char is unsigned in importc
-	// this macro is defined when using "gcc -fno-signed-char"
+	// macro set by "gcc -fno-signed-char", glibc checks this
 	"-D__CHAR_UNSIGNED__",
 
 	// http://port70.net/~nsz/c/c11/n1570.html#6.10.8.3
 	"-D__STDC_NO_ATOMICS__",
 	"-D__STDC_NO_VLA__",
 
-	// gcc predefined macros that don't apply to importcc
+	//
+	// GNU gcc/cpp macros that don't apply to importC
 	// list: cpp -dM /dev/null | sort
+	//
+
+	"-U__GNUC__",
+	"-U__GNUC_MINOR__",
+	"-U__GNUC_PATCHLEVEL__",
+
 	"-U__GCC_HAVE_DWARF2_CFI_ASM",
 	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1",
 	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2",
@@ -129,19 +136,14 @@ string[] cppArgs = [
 	"-U__HAVE_SPECULATION_SAFE_VALUE",
 
 	//
-	// builtins
+	// alternate keywords
 	//
-
-	// https://github.com/dlang/druntime/blob/master/src/importc.h
-	"-D__IMPORTC__",
-	"-D__builtin_offsetof(t,i)=((unsigned long)((char *)&((t *)0)->i - (char *)0))",
 
 	"-D__alignof=_Alignof",
 	"-D__alignof__=_Alignof",
 	"-D__asm=asm",
 	"-D__asm__=asm",
 	"-D__attribute=__attribute__",
-	"-D__extension__=",
 	"-D__inline=inline",
 	"-D__inline__=inline",
 	"-D__signed=signed",
@@ -151,19 +153,12 @@ string[] cppArgs = [
 	"-D__typeof__(x)=typeof(x)",
 	"-D__volatile__=volatile",
 
-	"-D__FUNCTION__=__builtin_FUNCTION",
-	"-D__PRETTY_FUNCTION__=__builtin_PRETTY_FUNCTION",
-
-	"-Dstrdupa(x)=__builtin_strdupa_finish(__builtin_alloca(__builtin_strdupa_prepare((x))))",
+	// ignored
+	"-D__extension__=",
 
 	//
 	// glibc
 	//
-
-	// undefine gcc version macros
-	"-U__GNUC__",
-	"-U__GNUC_MINOR__",
-	"-U__GNUC_PATCHLEVEL__",
 
 	// glibc's "pragma(mangle)"
 	"-D__REDIRECT(name, proto, alias)=name proto asm(#alias)",
@@ -173,13 +168,25 @@ string[] cppArgs = [
 
 	// headers that fail to parse
 	"-D_ASM_X86_SWAB_H", // unconditionally uses __asm__
-	"-D_EMMINTRIN_H_INCLUDED", // unconditionally uses mmx builtins
-	"-D_MMINTRIN_H_INCLUDED", // unconditionally uses sse builtins
-	"-D_XMMINTRIN_H_INCLUDED", // unconditionally uses sse2 builtins
+	"-D_MMINTRIN_H_INCLUDED", // unconditionally uses mmx builtins
+	"-D_XMMINTRIN_H_INCLUDED", // unconditionally uses sse builtins
+	"-D_EMMINTRIN_H_INCLUDED", // unconditionally uses sse2 builtins
 
 	// headers that use inline functions (implemented as templates in __importcc.di)
 	"-D_BITS_BYTESWAP_H",
 	"-D_BITS_UINTN_IDENTITY_H",
+
+	//
+	// builtins
+	//
+
+	// https://github.com/dlang/druntime/blob/master/src/importc.h
+	"-D__IMPORTC__",
+	"-D__builtin_offsetof(t,i)=((unsigned long)((char *)&((t *)0)->i - (char *)0))",
+
+	"-D__FUNCTION__=__builtin_FUNCTION",
+	"-D__PRETTY_FUNCTION__=__builtin_PRETTY_FUNCTION",
+	"-Dstrdupa(x)=__builtin_strdupa_finish(__builtin_alloca(__builtin_strdupa_prepare((x))))",
 
 	//
 	// libraries
