@@ -1031,6 +1031,10 @@ void doCommandLineArg(string[] args, out size_t used)
 			cppArgs ~= getOption();
 			dmdArgs ~= "-L-lpthread";
 			return;
+		case "-rdynamic":
+			// export symbols by default (put own symbols in dynamic symbol table)
+			// this is already the default with dmd
+			return;
 		case "-save-temps":
 			saveTemps = true;
 			return;
@@ -1050,6 +1054,11 @@ void doCommandLineArg(string[] args, out size_t used)
 			return;
 		case "-pedantic":
 		case "-W":
+		case "-Wempty-body":
+		case "-Wdisabled-optimization":
+		case "-Wimplicit-fallthrough":
+		case "-Wstrict-prototypes":
+		case "-Wvla":
 		case "-Wall":
 		case "-Wcast-align":
 		case "-Wcast-qual":
@@ -1057,10 +1066,13 @@ void doCommandLineArg(string[] args, out size_t used)
 		case "-Wextra":
 		case "-Wfloat-equal":
 		case "-Wmissing-prototypes":
+		case "-Wparentheses":
 		case "-Wpedantic":
+		case "-Wpointer-arith":
 		case "-Wshadow":
 		case "-Wsign-conversion":
 		case "-Wsuggest-attribute=noreturn":
+		case "-Wundef":
 		case "-Wunreachable-code":
 		case "-Wunused-function":
 		case "-Wunused-result":
@@ -1104,6 +1116,7 @@ void doCommandLineArg(string[] args, out size_t used)
 		case "-P":
 			cppArgs ~= getOption();
 			return;
+		case "-idirafter":
 		case "-include":
 			cppArgs ~= getOptionAndValue();
 			return;
@@ -1172,6 +1185,15 @@ next:
 		return;
 	}
 
+	// -o without a space
+	// support this if it's an absolute path since it's unambiguous
+	if (getOption().startsWith("-o/"))
+	{
+		myEnforce(!outFile, "more than one output file given");
+		outFile = getOption()["-o".length..$];
+		return;
+	}
+
 	//
 	// gcc
 	//
@@ -1200,6 +1222,10 @@ next:
 		return;
 	}
 	if (getOption().startsWith("-Wno-")) // silence specific warning
+	{
+		return; // ignore
+	}
+	if (getOption().startsWith("-Werror=")) // make specific warning an error
 	{
 		return; // ignore
 	}
