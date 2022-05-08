@@ -149,9 +149,6 @@ string[] cppArgs = [
 	"-D__thread=_Thread_local",
 	"-D__volatile__=volatile",
 
-	"-D__float128=__uint128_t", // hack
-	"-D__int128_t=__uint128_t", // hack
-
 	"-D__FUNCTION__=__builtin_FUNCTION",
 	"-D__PRETTY_FUNCTION__=__builtin_PRETTY_FUNCTION",
 

@@ -131,6 +131,11 @@ ulong __uint64_identity()(ulong x)
 
 // -----------------------------------------------------------------------------
 
+// gcc stddef.h on 32-bit needs this for max_align_t
+align(16) struct __float128 { ulong a,b; }
+
+// -----------------------------------------------------------------------------
+
 public import __extra;
 public import __gccbuiltins;
 public import __clangbuiltins;
