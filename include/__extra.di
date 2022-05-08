@@ -40,7 +40,7 @@ void __builtin_dbg_printf()(const(char)* fmt, ...)
 // similar to clang's __builtin_dump_struct
 // https://clang.llvm.org/docs/LanguageExtensions.html#builtin-dump-struct
 
-void __builtin_dump(T)(auto ref T t, string name = null)
+void __builtin_dump(T)(auto ref T t, const(char)* name = null)
 {
 	import core.stdc.stdio;
 
@@ -52,12 +52,11 @@ void __builtin_dump(T)(auto ref T t, string name = null)
 
 	if (name)
 	{
-		fprintf(f, "%s%.*s %.*s = ",
+		fprintf(f, "%s%.*s %s = %s",
 			tagPrefix!T,
 			cast(int)T.stringof.length,
 			T.stringof.ptr,
-			cast(int)name.length,
-			name.ptr);
+			name);
 	}
 
 	dump1(f, 0, t);
