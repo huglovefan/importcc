@@ -147,6 +147,8 @@ string[] cppArgs = [
 	"-D__signed=signed",
 	"-D__signed__=signed",
 	"-D__thread=_Thread_local",
+	"-D__typeof(x)=typeof(x)",
+	"-D__typeof__(x)=typeof(x)",
 	"-D__volatile__=volatile",
 
 	"-D__FUNCTION__=__builtin_FUNCTION",
