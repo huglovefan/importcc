@@ -299,8 +299,8 @@ out (rv)
 {
 	if (rv != 0 && "IMPCC_FAILCMD" in environment)
 	{
-		xoutput.writefln("importcc: the failing command line was:");
-		xoutput.writefln("  %s", args);
+		xoutput.writefln("importcc: command line: %s", escapeCommand(args));
+		xoutput.writefln("importcc: working directory: %s", getcwd());
 	}
 	if (rv != 0 && "IMPCC_FAILSRC" in environment)
 	{
