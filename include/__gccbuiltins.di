@@ -146,6 +146,20 @@ if (__traits(isIntegral, type) /*|| is(immutable type : immutable void*)*/)
 	}
 }
 
+type __atomic_fetch_add(type)(type* ptr, type val, int memorder)
+if (__traits(isIntegral, type) /*|| is(immutable type : immutable void*)*/)
+{
+	final switch (memorder)
+	{
+		case __ATOMIC_RELAXED: return Atomic.atomicFetchAdd!(MemoryOrder.raw)    (*ptr, val);
+		case __ATOMIC_CONSUME: goto case __ATOMIC_ACQUIRE;
+		case __ATOMIC_ACQUIRE: return Atomic.atomicFetchAdd!(MemoryOrder.acq)    (*ptr, val);
+		case __ATOMIC_RELEASE: return Atomic.atomicFetchAdd!(MemoryOrder.rel)    (*ptr, val);
+		case __ATOMIC_ACQ_REL: return Atomic.atomicFetchAdd!(MemoryOrder.acq_rel)(*ptr, val);
+		case __ATOMIC_SEQ_CST: return Atomic.atomicFetchAdd!(MemoryOrder.seq)    (*ptr, val);
+	}
+}
+
 bool __atomic_test_and_set(type)(type* ptr, int memorder)
 if (__traits(isIntegral, type) && type.sizeof == 1)
 {
