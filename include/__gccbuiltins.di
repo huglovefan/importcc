@@ -249,6 +249,7 @@ alias __builtin_alloca() = imported!"core.stdc.stdlib".alloca;
 
 alias __builtin_abort() = imported!"core.stdc.stdlib".abort;
 alias __builtin_memcpy() = imported!"core.stdc.string".memcpy;
+alias __builtin_printf() = imported!"core.stdc.stdio".printf;
 alias __builtin_strlen() = imported!"core.stdc.string".strlen;
 
 alias __builtin_isgreater()      = imported!"core.stdc.math".isgreater;
@@ -257,6 +258,11 @@ alias __builtin_isless()         = imported!"core.stdc.math".isless;
 alias __builtin_islessequal()    = imported!"core.stdc.math".islessequal;
 alias __builtin_islessgreater()  = imported!"core.stdc.math".islessgreater;
 alias __builtin_isunordered()    = imported!"core.stdc.math".isunordered;
+
+bool __builtin_is_constant_evaluated()()
+{
+	return __ctfe;
+}
 
 const(char)* __builtin_FUNCTION(string func = __FUNCTION__)()
 {
