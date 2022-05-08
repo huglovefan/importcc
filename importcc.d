@@ -135,6 +135,13 @@ string[] cppArgs = [
 	"-U__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8",
 	"-U__HAVE_SPECULATION_SAFE_VALUE",
 
+	"-U__MMX__",
+	"-U__MMX_WITH_SSE__",
+	"-U__SSE__",
+	"-U__SSE_MATH__",
+	"-U__SSE2__",
+	"-U__SSE2_MATH__",
+
 	//
 	// alternate keywords
 	//
