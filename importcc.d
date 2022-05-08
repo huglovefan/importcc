@@ -1256,8 +1256,8 @@ next:
 		return;
 	}
 
-	// unsupported option
-	if (getOption().startsWith('-'))
+	// unsupported option (excluding "-" as input file)
+	if (getOption().startsWith('-') && getOption() != "-")
 	{
 		used = 0;
 		return;
@@ -1348,6 +1348,11 @@ void addInputFileArg(string path)
 			}
 
 			if (languageOverride == "c")
+				goto case ".c";
+
+			// hack: support "-" as stdin when preprocessing only
+			// this is easy since the C preprocessor already supports it
+			if (path == "-" && compilerMode == Mode.preprocessOnly)
 				goto case ".c";
 
 			myEnforce(false, "unrecognized input file "~path);
